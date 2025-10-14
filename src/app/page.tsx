@@ -1,103 +1,136 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useEffect, useState, useCallback } from 'react'
+import { Chess, Square } from 'chess.js'
+import { socket } from './lib/socket'
+import ChatBox from './components/ChatBox'
+import MoveBox from './components/MoveBox'
+
+export default function Page() {
+  const [game, setGame] = useState(new Chess())
+  const [fen, setFen] = useState(game.fen())
+  const [color, setColor] = useState<'white' | 'black'>('white')
+  const [chat, setChat] = useState<string[]>([])
+  const [message, setMessage] = useState('')
+  const [turn, setTurn] = useState<'w' | 'b'>('w')
+  const [moveSquares, setMoveSquares] = useState<
+    Partial<Record<Square, { background: string }>>
+  >({})
+
+  // ✅ handleMove, handleChat แยกออกมาเพื่อไม่ให้ re-register socket ทุกครั้ง
+  const handleMove = useCallback(
+    ({ from, to }: { from: string; to: string }) => {
+      const updated = new Chess(fen)
+      updated.move({ from, to, promotion: 'q' })
+      setGame(updated)
+      setFen(updated.fen())
+      setTurn(updated.turn())
+      setMoveSquares({})
+    },
+    [fen]
+  )
+
+  const handleChat = useCallback((msg: string) => {
+    setChat((prev) => [...prev, msg])
+  }, [])
+
+  // ✅ จัดการ socket event แค่ครั้งเดียว
+  useEffect(() => {
+    socket.on('connect', () =>
+      console.log('[CLIENT] Connected with ID:', socket.id)
+    )
+    socket.on('move', handleMove)
+    socket.on('color', (assigned: 'white' | 'black') => setColor(assigned))
+    socket.on('chat', handleChat)
+    socket.on('connect_error', (err) => console.error('Socket error:', err))
+    socket.on('disconnect', () => console.warn('Socket disconnected'))
+    socket.on('reconnect', (n) => console.log('Reconnected after', n, 'tries'))
+
+    return () => {
+      socket.off('move', handleMove)
+      socket.off('color')
+      socket.off('chat', handleChat)
+    }
+  }, [handleMove, handleChat])
+
+  // ✅ ป้องกันฝั่งตรงข้ามขยับหมาก
+  const makeAMove = (move: { from: string; to: string }) => {
+    const isMyTurn =
+      (color === 'white' && turn === 'w') ||
+      (color === 'black' && turn === 'b')
+    if (!isMyTurn) return false
+
+    const updated = new Chess(fen)
+    const result = updated.move({ from: move.from, to: move.to, promotion: 'q' })
+    if (result) {
+      setGame(updated)
+      setFen(updated.fen())
+      setTurn(updated.turn())
+      setMoveSquares({})
+      socket.emit('move', move)
+      return true
+    }
+    return false
+  }
+
+  // ✅ แสดงทิศทางการเดิน
+  const onMouseOverSquare = (square: Square) => {
+    try {
+      const moves = game.moves({ square, verbose: true })
+      if (moves.length === 0) return
+      const highlights: Partial<Record<Square, { background: string }>> = {}
+      moves.forEach((m) => {
+        highlights[m.to] = {
+          background:
+            'radial-gradient(circle, rgba(255,255,0,0.4) 36%, transparent 40%)',
+        }
+      })
+      setMoveSquares(highlights)
+    } catch (e) {
+      console.error('Invalid square hover:', e)
+    }
+  }
+
+  const onMouseOutSquare = () => {
+    setMoveSquares({})
+  }
+
+  // ✅ ส่งข้อความ
+  const sendMessage = () => {
+    if (message.trim() !== '') {
+      socket.emit('chat', message)
+      setChat((prev) => [...prev, `Me: ${message}`])
+      setMessage('')
+    }
+  }
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main className="flex justify-center items-center min-h-screen bg-gray-900 text-white px-4">
+      <div className="grid grid-cols-1 md:grid-cols-[auto_300px] gap-6 w-full max-w-7xl">
+        <div className="flex flex-col gap-2">
+          <MoveBox
+            fen={fen}
+            color={color}
+            makeAMove={makeAMove}
+            onMouseOverSquare={(square) => onMouseOverSquare(square as Square)}
+            onMouseOutSquare={onMouseOutSquare}
+            moveSquares={moveSquares}
+          />
+          <div className="text-center text-sm text-gray-400">
+            Turn:{' '}
+            <span className="font-bold text-white">
+              {turn === 'w' ? 'White' : 'Black'}
+            </span>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+
+        <ChatBox
+          chat={chat}
+          message={message}
+          setMessage={setMessage}
+          sendMessage={sendMessage}
+        />
+      </div>
+    </main>
+  )
 }
