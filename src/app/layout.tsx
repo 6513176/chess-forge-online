@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'chessder',
-  description: 'ลองแล้วจะรู้ว่าแม่งสนุก',
+  title: 'chessforge',
+  description: 'just a chess',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
