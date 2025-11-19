@@ -2,6 +2,9 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { Chess } from 'chess.js'
+import { freshCardState, drawOneForSide, removeFromHand } from './cards.server.js';
+
+
 
 const app = express()
 const server = createServer(app)
@@ -11,8 +14,7 @@ app.get('/health', (_, res) => res.status(200).send('OK'))
 
 // ---------- helpers ----------
 const opp = (s) => (s === 'w' ? 'b' : 'w')
-const CARD_POOL = ['BUFF_EXTRA_MOVE', 'DEF_SHIELD', 'COUNTER_SACRIFICE']
-const pickRandomCard = () => CARD_POOL[Math.floor(Math.random() * CARD_POOL.length)]
+const INITIAL_CLOCK_SEC = 300
 
 // ---------- room state ----------
 const rooms = new Map()
@@ -24,22 +26,33 @@ function freshRoomState() {
     extra: { w: 0, b: 0 },
     shield: { by: null, square: null },
     counter: { by: null, armed: false },  
-    pendingCounter: null,                   // flow เก่า
+    pendingCounter: null,
     lastCapture: null,
     cardPlayedBy: null,
     captureCount: { w: 0, b: 0 },
 
+    // 🎴 ระบบการ์ดต่อห้อง
+    cards: freshCardState(),
+
     // เก็บกระดานปัจจุบันไว้ที่เซิร์ฟเวอร์
     fen: new Chess().fen(),
 
+    // ⏱ สถานะนาฬิกา (server authoritative)
+    clock: {
+      baseSec: INITIAL_CLOCK_SEC,
+      w: INITIAL_CLOCK_SEC,
+      b: INITIAL_CLOCK_SEC,
+      running: null,   // 'w' | 'b' | null (null = ยังไม่เริ่ม/หยุด)
+    },
+
     // สถานะเกม / ข้อจำกัด
     gameOver: false,
-    result: null,         // { type:'checkmate'|'stalemate'|'insufficient'|'draw', winner?:'w'|'b' }
-    noKingBy: null,       // 'w'|'b'|null  ฝั่งที่ “ห้ามกินคิง” (จาก buff/counter)
+    result: null,
+    noKingBy: null,
 
     // restart
     restart: {
-      votes: new Set(),   // เก็บ 'w'|'b' ที่กดพร้อมแล้ว
+      votes: new Set(),
       counting: false,
       timer: null,
       durationSec: 5,
@@ -59,6 +72,19 @@ function resetRoomInPlace(st) {
   const next = freshRoomState()
   next.players = keepPlayers
   return next
+}
+
+// sync มือให้ฝั่งเดียว (ไม่ให้ศัตรูเห็น)
+function syncHandToSide(roomId, side) {
+  const st = rooms.get(roomId)
+  if (!st) return
+  const hand = st.cards?.hands?.[side] || []
+
+  for (const [sockId, s] of st.players.entries()) {
+    if (s === side) {
+      io.to(sockId).emit('card:hand', hand)
+    }
+  }
 }
 
 // ประเมินจาก FEN หลังเดิน
@@ -81,6 +107,43 @@ function evaluateGameState(fen) {
   return { over: false, payload: { type: 'safe' } }
 }
 
+// ---------- clock loop (นับเวลาใน server ทุกห้อง) ----------
+setInterval(() => {
+  for (const [roomId, st] of rooms.entries()) {
+    if (st.gameOver) continue
+    const clk = st.clock
+    if (!clk || !clk.running) continue  // ยังไม่เริ่ม หรือพักอยู่
+
+    const side = clk.running            // 'w' หรือ 'b'
+    if (clk[side] <= 0) continue        // เผื่อมีหลุดยังไง
+
+    // หักเวลา 1 วินาที
+    clk[side] = Math.max(0, clk[side] - 1)
+
+    if (clk[side] <= 0) {
+      // ⏱ หมดเวลา -> แพ้
+      st.gameOver = true
+      const winner = opp(side)
+      st.result = { type: 'timeout', winner }
+      clk.running = null
+
+      io.to(roomId).emit('clock:update', {
+        w: clk.w,
+        b: clk.b,
+        running: clk.running,
+      })
+      io.to(roomId).emit('game:over', st.result)
+    } else {
+      // ยังไม่หมด ยิงอัปเดตเวลาให้ client
+      io.to(roomId).emit('clock:update', {
+        w: clk.w,
+        b: clk.b,
+        running: clk.running,
+      })
+    }
+  }
+}, 1000) // 1 วิ/ติ๊ก
+
 // ---------- socket ----------
 io.on('connection', (socket) => {
   // สร้างห้อง
@@ -91,7 +154,7 @@ io.on('connection', (socket) => {
   })
 
   // เข้าห้อง
-  socket.on('joinRoom', (roomId, ack) => {
+    socket.on('joinRoom', (roomId, ack) => {
     if (!roomId) return ack?.({ ok:false, reason:'no-room-id' })
     const st = ensureState(roomId)
 
@@ -110,8 +173,10 @@ io.on('connection', (socket) => {
 
     socket.join(roomId)
     st.players.set(socket.id, color)
+    const side = color  // 'w' | 'b'
 
     // ส่งสถานะทั้งหมดกลับไปเพื่อซิงก์ client
+        // ส่งสถานะทั้งหมดกลับไปเพื่อซิงก์ client
     ack?.({
       ok: true,
       color: color === 'w' ? 'white' : 'black',
@@ -120,7 +185,17 @@ io.on('connection', (socket) => {
       extra: st.extra,
       shield: st.shield,
       cardPlayedBy: st.cardPlayedBy,
+      clock: st.clock ? {
+        w: st.clock.w,
+        b: st.clock.b,
+        running: st.clock.running,
+      } : null,
+      hand: st.cards.hands[side] || [],   // 🎴 มือของเรา
     })
+
+    // 🎴 ส่งไพ่ในมือให้ player นี้อีกรอบผ่าน event
+    io.to(socket.id).emit('card:hand', st.cards.hands[side] || [])
+
 
     socket.once('disconnect', () => {
       const s = rooms.get(roomId); if (!s) return
@@ -130,13 +205,14 @@ io.on('connection', (socket) => {
     })
   })
 
+
   // แชท
   socket.on('chat:message', ({ roomId, text, from }) => {
     io.to(roomId).emit('chat:message', { text, from })
   })
 
   // ---------- cards ----------
-  socket.on('card:play', ({ roomId, color, card, payload }, cb) => {
+  socket.on('card:play', ({ roomId, color, card, uid, payload }, cb) => {
     const st = rooms.get(roomId)
     if (!st) return cb?.({ ok:false, reason:'no-room' })
     if (st.gameOver) return cb?.({ ok:false, reason:'game-over' })
@@ -145,11 +221,19 @@ io.on('connection', (socket) => {
     if (st.turn !== side) return cb?.({ ok:false, reason:'not-your-turn' })
     if (st.cardPlayedBy === side) return cb?.({ ok:false, reason:'card-already-used-this-turn' })
 
+    const hand = st.cards?.hands?.[side] || []
+    if (!hand.some(c => c.uid === uid && c.id === card)) {
+      return cb?.({ ok:false, reason:'card-not-in-hand' })
+    }
+
     switch (card) {
       case 'BUFF_EXTRA_MOVE': {
         st.extra[side] += 1
         st.cardPlayedBy = side
         st.noKingBy = side           //ห้ามกินคิงในเทิร์นนี้
+
+        removeFromHand(st.cards, side, uid)
+        syncHandToSide(roomId, side)
 
         io.to(roomId).emit('card:update', {
           extra: st.extra,
@@ -162,6 +246,10 @@ io.on('connection', (socket) => {
       case 'DEF_SHIELD': {
         st.shield = { by: side, square: payload?.square || null }
         st.cardPlayedBy = side
+
+        removeFromHand(st.cards, side, uid)
+        syncHandToSide(roomId, side)
+
         io.to(roomId).emit('card:update', { shield: st.shield, cardPlayedBy: st.cardPlayedBy })
         return cb?.({ ok:true })
       }
@@ -193,6 +281,9 @@ io.on('connection', (socket) => {
         st.cardPlayedBy = side
         st.noKingBy = side            
 
+        removeFromHand(st.cards, side, uid)
+        syncHandToSide(roomId, side)
+
         io.to(roomId).emit('counter:resolved', {
           fen: fenAdjusted,
           currentTurn: st.turn,
@@ -222,6 +313,11 @@ io.on('connection', (socket) => {
     // ตรวจสิทธิ์ตาเดิน
     if (side !== st.turn || side !== by) {
       return cb?.({ ok:false, reason:'not-your-turn' })
+    }
+
+    // เริ่มจับเวลาครั้งแรก
+    if (st.clock && !st.clock.running) {
+      st.clock.running = st.turn  // ปกติคือ 'w' ในตาแรก
     }
 
     // ห้ามกินคิง ขณะติดสถานะพิเศษ
@@ -255,14 +351,11 @@ io.on('connection', (socket) => {
       }
 
       st.captureCount[side] = (st.captureCount?.[side] ?? 0) + 1
+
+      // ทุก ๆ 2 คิล → จั่วการ์ด 1 ใบจากเด็ค
       if (st.captureCount[side] % 2 === 0) {
-        const awardedId = pickRandomCard()
-        for (const [sockId, c] of st.players.entries()) {
-          if (c === side) {
-            io.to(sockId).emit('card:award', { id: awardedId })
-            break
-          }
-        }
+        drawOneForSide(st.cards, side)
+        syncHandToSide(roomId, side)
       }
     }
 
@@ -284,6 +377,11 @@ io.on('connection', (socket) => {
       }
     }
 
+    // sync ให้ clock วิ่งตามเทิร์นปัจจุบัน
+    if (st.clock && !st.gameOver) {
+      st.clock.running = st.turn
+    }
+
     // ถ้าเหยื่อเป็นคนเดินแล้ว → หมดสิทธิ์โต้กลับในตานั้น
     if (st.lastCapture && side === st.lastCapture.victim) st.lastCapture = null
 
@@ -292,10 +390,12 @@ io.on('connection', (socket) => {
 
     //  broadcast กระดาน (ตาปัจจุบันที่คำนวณแล้ว)
     io.to(roomId).emit('game:move', { move, fenAfter, currentTurn: st.turn })
+
     const evalRes = evaluateGameState(fenAfter)
     if (evalRes.over) {
       st.gameOver = true
-      st.result = evalRes.payload // { type, winner? }
+      st.result = evalRes.payload
+      if (st.clock) st.clock.running = null   // หยุดนาฬิกาเมื่อเกมจบ
       io.to(roomId).emit('game:over', st.result)
     } else if (evalRes.payload.type === 'check') {
       io.to(roomId).emit('game:check', { sideInCheck: evalRes.payload.sideInCheck })
@@ -339,12 +439,28 @@ io.on('connection', (socket) => {
         rooms.set(roomId, newState)
 
         const startFen = new Chess().fen()
-        newState.fen = startFen //เซ็ต FEN เริ่มเกมใหม่ใน state ด้วย
+        newState.fen = startFen
+
+        // reset clock
+        if (newState.clock) {
+          newState.clock.w = INITIAL_CLOCK_SEC
+          newState.clock.b = INITIAL_CLOCK_SEC
+          newState.clock.running = null      // จะเริ่มใหม่เมื่อมีการเดินตาแรก
+        }
 
         io.to(roomId).emit('game:reset', {
           fen: startFen,
           currentTurn: newState.turn,
         })
+
+        // ส่งค่าเวลาเริ่มต้นไปให้ client ทันที
+        if (newState.clock) {
+          io.to(roomId).emit('clock:update', {
+            w: newState.clock.w,
+            b: newState.clock.b,
+            running: newState.clock.running,
+          })
+        }
       }, st.restart.durationSec * 1000)
     }
 
