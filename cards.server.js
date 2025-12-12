@@ -1,101 +1,381 @@
 // cards.server.js (ESM version)
-
-// ==== Card ทั้ง 26 ใบ ====
-// ตอนนี้ใช้ 3 ชนิดเดิม แต่กระจายจำนวนให้ครบ 26 ใบ
-// ถ้าคุณออกแบบการ์ดใหม่ ค่อยมาแก้ตรงนี้ทีหลังได้
+import { Chess } from 'chess.js'
 const ALL_CARD_IDS = [
-  // 10 ใบ: BUFF_EXTRA_MOVE
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
   'BUFF_EXTRA_MOVE',
   'BUFF_EXTRA_MOVE',
   'BUFF_EXTRA_MOVE',
   'BUFF_EXTRA_MOVE',
 
-  // 8 ใบ: DEF_SHIELD
-  'DEF_SHIELD',
-  'DEF_SHIELD',
-  'DEF_SHIELD',
-  'DEF_SHIELD',
-  'DEF_SHIELD',
+  'BUFF_PAWN_RANGE',
+  'BUFF_PAWN_RANGE',
+
+  'BUFF_SUMMON_PAWN',
+  'BUFF_SUMMON_PAWN',
+  'BUFF_SUMMON_PAWN',
+
+  'BUFF_SWAP_ALLY',
+  'BUFF_SWAP_ALLY',
+  'BUFF_SWAP_ALLY',
+  'BUFF_SWAP_ALLY',
+
   'DEF_SHIELD',
   'DEF_SHIELD',
   'DEF_SHIELD',
 
-  // 8 ใบ: COUNTER_SACRIFICE
+  'DEF_SAFE_ZONE',
+  'DEF_SAFE_ZONE',
+
   'COUNTER_SACRIFICE',
   'COUNTER_SACRIFICE',
-  'COUNTER_SACRIFICE',
-  'COUNTER_SACRIFICE',
-  'COUNTER_SACRIFICE',
-  'COUNTER_SACRIFICE',
-  'COUNTER_SACRIFICE',
-  'COUNTER_SACRIFICE',
-];
+
+  'AOE_BLAST',
+  'AOE_BLAST',
+
+
+  'CLEANSE_BUFFS',
+  'CLEANSE_BUFFS',
+  'CLEANSE_BUFFS',
+]
 
 const mkUid = () =>
-  Math.random().toString(36).slice(2) + Date.now().toString(36);
+  Math.random().toString(36).slice(2) + Date.now().toString(36)
 
 // random deck 26 ใบจาก ALL_CARD_IDS
 function createNewDeck() {
-  const arr = [...ALL_CARD_IDS];
+  const arr = [...ALL_CARD_IDS]
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
-  return arr; // CardId[]
+  return arr // CardId[]
 }
 
 // จั่ว n ใบจาก deck (mutate deck)
 function drawCards(deck, n) {
-  const drawn = [];
+  const drawn = []
   for (let i = 0; i < n; i++) {
-    if (!deck.length) break;
-    const id = deck.shift(); // เอาจากหัวกอง
-    drawn.push({ id, uid: mkUid() }); // CardInstance แบบ {id, uid}
+    if (!deck.length) break
+    const id = deck.shift() // เอาจากหัวกอง
+    drawn.push({ id, uid: mkUid() }) // CardInstance แบบ {id, uid}
   }
-  return drawn;
+  return drawn
 }
 
 // state เริ่มต้นของระบบการ์ดในห้องนึง
 export function freshCardState() {
-  const deck = createNewDeck(); // 26 ใบ
-  const hands = { w: [], b: [] };
+  const deck = createNewDeck() // 26 ใบ
+  const hands = { w: [], b: [] }
 
   // แจกคนละ 3 → deck เหลือ 20
-  hands.w = drawCards(deck, 3);
-  hands.b = drawCards(deck, 3);
+  hands.w = drawCards(deck, 3)
+  hands.b = drawCards(deck, 3)
 
   return {
-    deck,               // CardId[]
-    hands,              // { w: CardInstance[], b: CardInstance[] }
-    graveyard: [],      // ใบที่ใช้แล้ว
+    deck, // CardId[]
+    hands, // { w: CardInstance[], b: CardInstance[] }
+    graveyard: [], // ใบที่ใช้แล้ว
     playedThisTurn: { w: false, b: false },
-  };
+  }
 }
 
 // จั่ว 1 ใบให้ฝั่งที่ระบุ
 export function drawOneForSide(cardState, side) {
-  const got = drawCards(cardState.deck, 1);
+  const got = drawCards(cardState.deck, 1)
   if (got.length) {
-    cardState.hands[side].push(got[0]);
-    return got[0];
+    cardState.hands[side].push(got[0])
+    return got[0]
   }
-  return null;
+  return null
 }
 
 // เอาการ์ดออกจากมือด้วย uid แล้วโยนเข้ากองทิ้ง
 export function removeFromHand(cardState, side, uid) {
-  const hand = cardState.hands[side];
-  const idx = hand.findIndex((c) => c.uid === uid);
+  const hand = cardState.hands[side]
+  const idx = hand.findIndex((c) => c.uid === uid)
   if (idx >= 0) {
-    const [removed] = hand.splice(idx, 1);
-    cardState.graveyard.push(removed);
-    return removed;
+    const [removed] = hand.splice(idx, 1)
+    cardState.graveyard.push(removed)
+    return removed
   }
-  return null;
+  return null
+}
+
+/**
+ * ฟังก์ชันกลางใช้เล่นการ์ดทุกใบใน server
+ * @param {Object} params
+ *  - st: room state
+ *  - roomId: string
+ *  - side: 'w' | 'b'
+ *  - card: CardId
+ *  - uid: string
+ *  - payload: any
+ *  - io: socket.io server instance
+ *  - syncHandToSide: function(roomId, side)
+ */
+export function playCardOnServer({
+  st,
+  roomId,
+  side,
+  card,
+  uid,
+  payload,
+  io,
+  syncHandToSide,
+}) {
+  const hand = st.cards?.hands?.[side] || []
+  if (!hand.some((c) => c.uid === uid && c.id === card)) {
+    return { ok: false, reason: 'card-not-in-hand' }
+  }
+
+  switch (card) {
+    // -------- BUFF / Utility --------
+    case 'BUFF_EXTRA_MOVE': {
+      st.extra[side] += 1
+      st.cardPlayedBy = side
+      st.noKingBy = side // ห้ามกินคิงในเทิร์นนี้
+
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('card:update', {
+        extra: st.extra,
+        cardPlayedBy: st.cardPlayedBy,
+        noKingBy: st.noKingBy,
+      })
+      return { ok: true }
+    }
+
+        case 'BUFF_PAWN_RANGE': {
+      const sq = payload?.square
+      if (!sq) return { ok: false, reason: 'need-target-square' }
+
+      const ch = new Chess(st.fen)
+      const p = ch.get(sq)
+      if (!p || p.color !== side) {
+        return { ok: false, reason: 'not-your-piece' }
+      }
+
+      // ✅ แปะบัพติดตัวที่ช่องนี้ (ใช้กับทุกตัว ไม่จำกัดแค่ pawn)
+      if (!st.pawnRange) st.pawnRange = {}
+      st.pawnRange[sq] = { by: side }
+
+      st.cardPlayedBy = side
+
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('card:update', {
+        pawnRange: st.pawnRange,
+        cardPlayedBy: st.cardPlayedBy,
+      })
+      return { ok: true }
+    }
+
+
+    case 'BUFF_SUMMON_PAWN': {
+      const sq = payload?.square
+      if (!sq) return { ok: false, reason: 'need-square' }
+
+      const ch = new Chess(st.fen)
+      if (ch.get(sq)) return { ok: false, reason: 'not-empty' }
+
+      const rank = parseInt(sq[1])
+      if (side === 'w' && rank !== 2)
+        return { ok: false, reason: 'white-in-rank-2' }
+      if (side === 'b' && rank !== 7)
+        return { ok: false, reason: 'black-in-rank-7' }
+
+      ch.put({ type: 'p', color: side }, sq)
+      const fenNew = ch.fen()
+      st.fen = fenNew
+
+      st.cardPlayedBy = side
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('game:move', {
+        move: {},
+        fenAfter: fenNew,
+        currentTurn: st.turn,
+      })
+      io.to(roomId).emit('card:update', { cardPlayedBy: st.cardPlayedBy })
+
+      return { ok: true }
+    }
+
+        case 'BUFF_SWAP_ALLY': {
+      const a = payload?.a
+      const b = payload?.b
+      if (!a || !b) return { ok: false, reason: 'need-two-squares' }
+
+      const ch = new Chess(st.fen)
+      const pa = ch.get(a)
+      const pb = ch.get(b)
+
+      if (!pa || pa.color !== side) return { ok: false, reason: 'bad-a' }
+      if (!pb || pb.color !== side) return { ok: false, reason: 'bad-b' }
+      if (a === b) return { ok: false, reason: 'same-square' }
+
+      // ❌ ป้องกันไม่ให้ pawn ไปอยู่ rank 1 หรือ 8
+      const rankA = parseInt(a[1], 10)
+      const rankB = parseInt(b[1], 10)
+      if (
+        (pa.type === 'p' && (rankB === 1 || rankB === 8)) ||
+        (pb.type === 'p' && (rankA === 1 || rankA === 8))
+      ) {
+        return { ok: false, reason: 'pawn-cannot-swap-to-edge-rank' }
+      }
+
+      ch.remove(a)
+      ch.remove(b)
+      ch.put(pa, b)
+      ch.put(pb, a)
+
+      const fenNew = ch.fen()
+      st.fen = fenNew
+
+      st.cardPlayedBy = side
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('game:move', {
+        move: {},
+        fenAfter: fenNew,
+        currentTurn: st.turn,
+      })
+      io.to(roomId).emit('card:update', { cardPlayedBy: st.cardPlayedBy })
+
+      return { ok: true }
+    }
+
+
+    // -------- ป้องกัน / Safe zone 3x3 --------
+    case 'DEF_SHIELD': {
+      st.shield = { by: side, square: payload?.square || null }
+      st.cardPlayedBy = side
+
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('card:update', {
+        shield: st.shield,
+        cardPlayedBy: st.cardPlayedBy,
+      })
+      return { ok: true }
+    }
+
+    case 'DEF_SAFE_ZONE': {
+      const sq = payload?.square
+      if (!sq) return { ok: false, reason: 'need-square' }
+
+      // ตีความเป็นศูนย์กลางของโซน 3x3
+      st.safeZone = { by: side, square: sq }
+      st.cardPlayedBy = side
+
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('card:update', {
+        safeZone: st.safeZone,
+        cardPlayedBy: st.cardPlayedBy,
+      })
+      return { ok: true }
+    }
+
+    // -------- AOE 3×3 ดีเลย์ 2 เทิร์น --------
+    case 'AOE_BLAST': {
+      const sq = payload?.square
+      if (!sq) return { ok: false, reason: 'need-square' }
+      st.aoe = {
+        by: side,
+        center: sq,
+        remaining: 2, // ดีเลย์ 2 เทิร์นของฝั่งที่ลงการ์ด
+      }
+      st.cardPlayedBy = side
+
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('card:update', {
+        aoe: st.aoe,
+        cardPlayedBy: st.cardPlayedBy,
+      })
+
+      return { ok: true }
+    }
+
+    // -------- ล้างบัพทั้งหมด --------
+    case 'CLEANSE_BUFFS': {
+      // ล้างทุกบัพ/สถานะทั้งสองฝั่ง
+      st.extra = { w: 0, b: 0 }
+      st.shield = { by: null, square: null }
+      st.safeZone = { by: null, square: null }
+      st.pawnRange = {}
+      st.noKingBy = null
+      st.aoe = null
+
+      st.cardPlayedBy = side
+
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('card:update', {
+        extra: st.extra,
+        shield: st.shield,
+        safeZone: st.safeZone,
+        pawnRange: st.pawnRange,
+        aoe: st.aoe,
+        noKingBy: st.noKingBy,
+        cardPlayedBy: st.cardPlayedBy,
+      })
+
+      return { ok: true }
+    }
+
+    // -------- โต้กลับ --------
+    case 'COUNTER_SACRIFICE': {
+      const lc = st.lastCapture
+      if (!lc || lc.victim !== side || st.turn !== side) {
+        return { ok: false, reason: 'no-recent-capture' }
+      }
+      const sq = payload?.sacrificeSquare
+      if (!sq) return { ok: false, reason: 'need-sacrifice-square' }
+
+      const ch = new Chess(lc.fenAfter)
+      const atkColor = lc.victim === 'w' ? 'b' : 'w'
+      const atkType = lc.attackerPieceType || 'p'
+      ch.remove(lc.attackerTo)
+      ch.put({ type: atkType, color: atkColor }, lc.attackerFrom)
+
+      const reviveType = lc.capturedPieceType || 'p'
+      ch.put({ type: reviveType, color: lc.victim }, lc.capturedSquare)
+
+      ch.remove(sq)
+
+      const fenAdjusted = ch.fen()
+
+      // อัปเดตห้อง + สื่อสารไป client
+      st.fen = fenAdjusted
+      st.lastCapture = null
+      st.cardPlayedBy = side
+      st.noKingBy = side
+
+      removeFromHand(st.cards, side, uid)
+      syncHandToSide(roomId, side)
+
+      io.to(roomId).emit('counter:resolved', {
+        fen: fenAdjusted,
+        currentTurn: st.turn,
+      })
+      io.to(roomId).emit('card:update', {
+        cardPlayedBy: st.cardPlayedBy,
+        noKingBy: st.noKingBy,
+      })
+
+      return { ok: true }
+    }
+
+    default:
+      return { ok: false, reason: 'unknown-card' }
+  }
 }

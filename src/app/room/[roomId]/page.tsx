@@ -6,23 +6,80 @@ import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { joinRoom, socket } from '@/app/lib/socket';
 
-type CardId = 'BUFF_EXTRA_MOVE' | 'DEF_SHIELD' | 'COUNTER_SACRIFICE';
-type Card = { id: CardId; name: string; desc: string; playNeedsTargetSquare?: boolean };
+// ---- Card types ----
+type CardId =
+  | 'BUFF_EXTRA_MOVE'
+  | 'DEF_SHIELD'
+  | 'COUNTER_SACRIFICE'
+  | 'BUFF_PAWN_RANGE'
+  | 'BUFF_SUMMON_PAWN'
+  | 'BUFF_SWAP_ALLY'
+  | 'DEF_SAFE_ZONE'
+  | 'AOE_BLAST'
+  | 'CLEANSE_BUFFS';
+
+type Card = {
+  id: CardId;
+  name: string;
+  desc: string;
+};
 
 // ใบจริงในมือ (client จะใช้ข้อมูลจาก server + map หา name/desc)
 type CardInstance = Card & { uid: string };
 
+// นิยามการ์ดทั้งหมด (ฝั่ง client แค่ใช้เพื่อแสดงชื่อ/คำอธิบาย)
 const CARD_DEFS: Card[] = [
-  { id: 'BUFF_EXTRA_MOVE',    name: 'FORGE',     desc: 'ได้เดินเพิ่มอีก 1 ครั้งในเทิร์นนี้' },
-  { id: 'DEF_SHIELD',         name: 'SHEILD',    desc: 'กันชิ้นที่เลือกไม่ให้โดนกิน 1 เทิร์น', playNeedsTargetSquare: true },
-  { id: 'COUNTER_SACRIFICE',  name: 'SACRIFICE', desc: 'ตายแทน” (1 ครั้ง)' },
+  {
+    id: 'BUFF_EXTRA_MOVE',
+    name: 'FORGE',
+    desc: 'ได้เดินเพิ่มอีก 1 ครั้งในเทิร์นนี้ (แต่ห้ามกินราชา)',
+  },
+  {
+    id: 'DEF_SHIELD',
+    name: 'SHIELD',
+    desc: 'กันชิ้นที่เลือกไม่ให้โดนกิน 1 เทิร์น',
+  },
+  {
+    id: 'COUNTER_SACRIFICE',
+    name: 'SACRIFICE',
+    desc: 'โต้กลับ: ย้อนคืนหมากที่เพิ่งตาย โดยสละหมากเรา 1 ตัว',
+  },
+  {
+    id: 'BUFF_PAWN_RANGE',
+    name: 'PAWN RANGE+',
+    desc: 'เลือกเบี้ย 1 ตัว ให้เดิน 2 ช่องได้ตลอดเกม',
+  },
+  {
+    id: 'BUFF_SUMMON_PAWN',
+    name: 'SUMMON PAWN',
+    desc: 'เรียกเบี้ยใหม่บนแถวตั้งต้นของเรา (ขาวแถว 2, ดำแถว 7)',
+  },
+  {
+    id: 'BUFF_SWAP_ALLY',
+    name: 'SWAP',
+    desc: 'สลับตำแหน่งหมากของคุณ 2 ตัว',
+  },
+  {
+    id: 'DEF_SAFE_ZONE',
+    name: 'SAFE ZONE',
+    desc: 'สร้างเขตปลอดภัย 3×3 รอบช่องที่เลือก 1 เทิร์น',
+  },
+  {
+    id: 'AOE_BLAST',
+    name: 'AOE BLAST',
+    desc: 'สุ่มทำลายหมาก 1 ตัวในพื้นที่ 3×3 หลังผ่านไป 2 เทิร์นของคุณ',
+  },
+  {
+    id: 'CLEANSE_BUFFS',
+    name: 'CLEANSE',
+    desc: 'ล้างบัพ',
+  },
 ];
 
-const CARD_MAP: Record<CardId, Card> = {
-  BUFF_EXTRA_MOVE:    CARD_DEFS[0],
-  DEF_SHIELD:         CARD_DEFS[1],
-  COUNTER_SACRIFICE:  CARD_DEFS[2],
-};
+const CARD_MAP: Record<CardId, Card> = CARD_DEFS.reduce((acc, c) => {
+  acc[c.id] = c;
+  return acc;
+}, {} as Record<CardId, Card>);
 
 // map จาก {id, uid} ที่ได้จาก server → CardInstance ที่มี name/desc
 function fromServerCard(raw: { id: CardId; uid: string }): CardInstance {
@@ -31,7 +88,27 @@ function fromServerCard(raw: { id: CardId; uid: string }): CardInstance {
 }
 
 // เวลาเริ่มต้นต่อฝั่ง (ต้องให้ server ใช้ค่าเดียวกันด้วย)
-const INITIAL_TIME = 300; // 300 วินาที = 5 นาที
+const INITIAL_TIME = 420; // 300 วินาที = 5 นาที
+
+// helper 3×3 รอบ center (ใช้สำหรับ safe zone / aoe highlight)
+function getArea3x3(centerSquare: string | null) {
+  if (!centerSquare || centerSquare.length !== 2) return {};
+  const file = centerSquare[0].charCodeAt(0); // 'a'..'h'
+  const rank = parseInt(centerSquare[1], 10); // 1..8
+  const out: Record<string, boolean> = {};
+
+  for (let df = -1; df <= 1; df++) {
+    for (let dr = -1; dr <= 1; dr++) {
+      const f = file + df;
+      const r = rank + dr;
+      if (f < 'a'.charCodeAt(0) || f > 'h'.charCodeAt(0)) continue;
+      if (r < 1 || r > 8) continue;
+      const sq = String.fromCharCode(f) + r;
+      out[sq] = true;
+    }
+  }
+  return out;
+}
 
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -41,9 +118,13 @@ export default function RoomPage() {
   const [fen, setFen] = useState(gameRef.current.fen());
   const [turn, setTurn] = useState<'w' | 'b'>('w');
   const [color, setColor] = useState<'white' | 'black' | null>(null);
+  const [hoverSquare, setHoverSquare] = useState<string | null>(null);
+
 
   const [isOver, setIsOver] = useState(false);
-  const [result, setResult] = useState<{ type: string; winner?: 'w' | 'b' } | null>(null);
+  const [result, setResult] = useState<{ type: string; winner?: 'w' | 'b' } | null>(
+    null
+  );
   const [checkSide, setCheckSide] = useState<'w' | 'b' | null>(null);
 
   // restart state
@@ -67,19 +148,52 @@ export default function RoomPage() {
       : 0;
 
   // --- card states/overlays ---
-  const [extraMove, setExtraMove] = useState<{ w: number; b: number }>({ w: 0, b: 0 });
-  const [shield, setShield] = useState<{ by: null | 'w' | 'b'; square: null | string }>({
-    by: null,
-    square: null,
+  const [extraMove, setExtraMove] = useState<{ w: number; b: number }>({
+    w: 0,
+    b: 0,
   });
+  const [shield, setShield] = useState<{ by: null | 'w' | 'b'; square: null | string }>(
+    {
+      by: null,
+      square: null,
+    }
+  );
+  const [safeZone, setSafeZone] = useState<{ by: null | 'w' | 'b'; square: null | string }>(
+    {
+      by: null,
+      square: null,
+    }
+  );
+  const [pawnRange, setPawnRange] = useState<Record<string, boolean>>({}); // { square: true }
+  const [aoe, setAoe] = useState<{ by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null>(
+    null
+  );
+
   const [hand, setHand] = useState<CardInstance[]>([]);
   const [cardPlayedBy, setCardPlayedBy] = useState<'w' | 'b' | null>(null);
 
-  // overlays
+  // overlays (โหมดเลือกเป้าหมายของการ์ด)
   const [selectingShield, setSelectingShield] = useState(false);
   const [shieldCardUid, setShieldCardUid] = useState<string | null>(null);
+
   const [selectingCounterSac, setSelectingCounterSac] = useState(false);
   const [counterCardUid, setCounterCardUid] = useState<string | null>(null);
+
+  const [selectingPawnRange, setSelectingPawnRange] = useState(false);
+  const [pawnRangeCardUid, setPawnRangeCardUid] = useState<string | null>(null);
+
+  const [selectingSummonPawn, setSelectingSummonPawn] = useState(false);
+  const [summonCardUid, setSummonCardUid] = useState<string | null>(null);
+
+  const [selectingSwap, setSelectingSwap] = useState(false);
+  const [swapCardUid, setSwapCardUid] = useState<string | null>(null);
+  const [swapFirstSquare, setSwapFirstSquare] = useState<Square | null>(null);
+
+  const [selectingSafeZone, setSelectingSafeZone] = useState(false);
+  const [safeZoneCardUid, setSafeZoneCardUid] = useState<string | null>(null);
+
+  const [selectingAoe, setSelectingAoe] = useState(false);
+  const [aoeCardUid, setAoeCardUid] = useState<string | null>(null);
 
   // chat
   const [chat, setChat] = useState<string[]>([]);
@@ -90,9 +204,6 @@ export default function RoomPage() {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
-
-  // ❌ ไม่ต้องแจกการ์ดเริ่มต้นฝั่ง client แล้ว
-  // server เป็นคนแจกผ่าน res.hand + card:hand
 
   // join room + socket listeners
   useEffect(() => {
@@ -127,6 +238,9 @@ export default function RoomPage() {
       // ซิงก์ card state (public)
       if (res.extra) setExtraMove(res.extra);
       if (res.shield) setShield(res.shield);
+      if (res.safeZone) setSafeZone(res.safeZone);
+      if (res.pawnRange) setPawnRange(res.pawnRange);
+      if (res.aoe) setAoe(res.aoe);
       if (res.cardPlayedBy !== undefined) setCardPlayedBy(res.cardPlayedBy);
 
       // ซิงก์ hand เริ่มเกม (private hand จาก server)
@@ -144,6 +258,9 @@ export default function RoomPage() {
       const onCardUpdate = (data: any) => {
         if (data.extra) setExtraMove(data.extra);
         if (data.shield) setShield(data.shield);
+        if (data.safeZone) setSafeZone(data.safeZone);
+        if (data.pawnRange) setPawnRange(data.pawnRange);
+        if (data.aoe !== undefined) setAoe(data.aoe || null);
         if (data.cardPlayedBy !== undefined) setCardPlayedBy(data.cardPlayedBy);
       };
 
@@ -284,9 +401,19 @@ export default function RoomPage() {
     });
   }
 
+  const anySelecting =
+    selectingShield ||
+    selectingCounterSac ||
+    selectingPawnRange ||
+    selectingSummonPawn ||
+    selectingSwap ||
+    selectingSafeZone ||
+    selectingAoe;
+
   // make move
   function handleMove({ from, to }: { from: Square; to: Square }) {
     if (!meSide || turn !== meSide) return false;
+    if (anySelecting) return false;
 
     // force side to move
     let fenNow = gameRef.current.fen();
@@ -320,13 +447,14 @@ export default function RoomPage() {
     const fenAfter = game.fen();
 
     // client-side guard: extra move cannot capture king
-    const myExtra = meSide === 'w' ? extraMove.w : extraMove.b;
-    if (myExtra > 0 && mv.captured === 'k') {
+        const myExtra = meSide === 'w' ? extraMove.w : extraMove.b;
+    if (myExtra > 0 && mv.captured) {
       game.undo();
       setFen(game.fen());
-      alert('ห้ามกิน King ด้วยการเดินจากการ์ดเสริมพลัง');
+      alert('Extra move ใช้เดินอย่างเดียว ห้ามกินหมาก');
       return false;
     }
+
 
     setFen(fenAfter);
 
@@ -357,10 +485,17 @@ export default function RoomPage() {
     return true;
   }
 
-  // play cards
+  // ---- play cards ----
   function playCard(card: CardInstance) {
     if (!meSide || turn !== meSide) return;
 
+    // ป้องกันเล่นหลายใบในเทิร์นเดียว
+    if (cardPlayedBy === meSide) {
+      alert('ใช้การ์ดในเทิร์นนี้ไปแล้ว');
+      return;
+    }
+
+    // การ์ดที่ต้องเลือกเป้าบนบอร์ด
     if (card.id === 'DEF_SHIELD') {
       setSelectingShield(true);
       setShieldCardUid(card.uid);
@@ -373,6 +508,38 @@ export default function RoomPage() {
       return;
     }
 
+    if (card.id === 'BUFF_PAWN_RANGE') {
+      setSelectingPawnRange(true);
+      setPawnRangeCardUid(card.uid);
+      return;
+    }
+
+    if (card.id === 'BUFF_SUMMON_PAWN') {
+      setSelectingSummonPawn(true);
+      setSummonCardUid(card.uid);
+      return;
+    }
+
+    if (card.id === 'BUFF_SWAP_ALLY') {
+      setSelectingSwap(true);
+      setSwapCardUid(card.uid);
+      setSwapFirstSquare(null);
+      return;
+    }
+
+    if (card.id === 'DEF_SAFE_ZONE') {
+      setSelectingSafeZone(true);
+      setSafeZoneCardUid(card.uid);
+      return;
+    }
+
+    if (card.id === 'AOE_BLAST') {
+      setSelectingAoe(true);
+      setAoeCardUid(card.uid);
+      return;
+    }
+
+    // CLEANSE_BUFFS หรือการ์ดไม่ต้องเลือกเป้า
     socket.emit(
       'card:play',
       { roomId, color, card: card.id, uid: card.uid },
@@ -380,10 +547,11 @@ export default function RoomPage() {
         if (!ack?.ok) {
           alert(ack?.reason || 'Play card failed');
         }
-        // ถ้า ok: server จะลบจากมือ + ส่ง card:hand มาเอง
       }
     );
   }
+
+  // ---- target handlers ----
 
   // shield target
   function handleSquareClickForShield(square: Square) {
@@ -404,7 +572,6 @@ export default function RoomPage() {
         if (!ack?.ok) {
           alert(ack?.reason || 'Play card failed');
         }
-        // ถ้า ok: server จะอัปเดตมือให้ผ่าน card:hand
         setSelectingShield(false);
         setShieldCardUid(null);
       }
@@ -432,14 +599,250 @@ export default function RoomPage() {
         if (!ack?.ok) {
           alert(ack?.reason || 'ใช้การ์ดไม่ได้');
         }
-        // ถ้า ok: server จะอัปเดตมือให้ผ่าน card:hand
         setSelectingCounterSac(false);
         setCounterCardUid(null);
       }
     );
   }
 
+  // BUFF_PAWN_RANGE: เลือก pawn ของเรา
+  function handleSquareClickForPawnRange(square: Square) {
+    if (!selectingPawnRange || !pawnRangeCardUid) return;
+    const p: any = gameRef.current.get(square as any);
+    if (!p || p.color !== meSide || p.type !== 'p') {
+      alert('เลือกเฉพาะเบี้ยของคุณเท่านั้น');
+      return;
+    }
+
+    socket.emit(
+      'card:play',
+      {
+        roomId,
+        color,
+        card: 'BUFF_PAWN_RANGE',
+        uid: pawnRangeCardUid,
+        payload: { square },
+      },
+      (ack: any) => {
+        if (!ack?.ok) {
+          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
+        }
+        setSelectingPawnRange(false);
+        setPawnRangeCardUid(null);
+      }
+    );
+  }
+
+  // BUFF_SUMMON_PAWN: เลือกช่องว่างบนแถว 2(ขาว) / 7(ดำ)
+  function handleSquareClickForSummon(square: Square) {
+    if (!selectingSummonPawn || !summonCardUid) return;
+
+    const p: any = gameRef.current.get(square as any);
+    if (p) {
+      alert('ต้องเลือกช่องว่างเท่านั้น');
+      return;
+    }
+
+    const rank = parseInt(square[1]);
+    if (meSide === 'w' && rank !== 2) {
+      alert('ขาวต้องวางบนแถว 2 เท่านั้น');
+      return;
+    }
+    if (meSide === 'b' && rank !== 7) {
+      alert('ดำต้องวางบนแถว 7 เท่านั้น');
+      return;
+    }
+
+    socket.emit(
+      'card:play',
+      {
+        roomId,
+        color,
+        card: 'BUFF_SUMMON_PAWN',
+        uid: summonCardUid,
+        payload: { square },
+      },
+      (ack: any) => {
+        if (!ack?.ok) {
+          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
+        }
+        setSelectingSummonPawn(false);
+        setSummonCardUid(null);
+      }
+    );
+  }
+
+  // BUFF_SWAP_ALLY: เลือกหมากเรา 2 ตัว
+  function handleSquareClickForSwap(square: Square) {
+    if (!selectingSwap || !swapCardUid) return;
+
+    const p: any = gameRef.current.get(square as any);
+    if (!p || p.color !== meSide) {
+      alert('เลือกเฉพาะหมากของคุณเท่านั้น');
+      return;
+    }
+
+    if (!swapFirstSquare) {
+      // เลือกตัวแรก
+      setSwapFirstSquare(square);
+      return;
+    }
+
+    if (swapFirstSquare === square) {
+      alert('ต้องเลือกอีกช่องที่ต่างกัน');
+      return;
+    }
+
+    // เลือกตัวที่สอง ครบแล้ว ยิงไป server
+    socket.emit(
+      'card:play',
+      {
+        roomId,
+        color,
+        card: 'BUFF_SWAP_ALLY',
+        uid: swapCardUid,
+        payload: { a: swapFirstSquare, b: square },
+      },
+      (ack: any) => {
+        if (!ack?.ok) {
+          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
+        }
+        setSelectingSwap(false);
+        setSwapCardUid(null);
+        setSwapFirstSquare(null);
+      }
+    );
+  }
+
+  // DEF_SAFE_ZONE 3×3: เลือก center ช่องเดียว
+  function handleSquareClickForSafeZone(square: Square) {
+    if (!selectingSafeZone || !safeZoneCardUid) return;
+
+    socket.emit(
+      'card:play',
+      {
+        roomId,
+        color,
+        card: 'DEF_SAFE_ZONE',
+        uid: safeZoneCardUid,
+        payload: { square },
+      },
+      (ack: any) => {
+        if (!ack?.ok) {
+          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
+        }
+        setSelectingSafeZone(false);
+        setSafeZoneCardUid(null);
+      }
+    );
+  }
+
+  // AOE_BLAST 3×3: เลือก center ช่องเดียว
+  function handleSquareClickForAoe(square: Square) {
+    if (!selectingAoe || !aoeCardUid) return;
+
+    socket.emit(
+      'card:play',
+      {
+        roomId,
+        color,
+        card: 'AOE_BLAST',
+        uid: aoeCardUid,
+        payload: { square },
+      },
+      (ack: any) => {
+        if (!ack?.ok) {
+          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
+        }
+        setSelectingAoe(false);
+        setAoeCardUid(null);
+      }
+    );
+  }
+
   const inviteUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+  // custom square styles (shield + safeZone 3x3 + AOE center + first swap)
+  const customSquareStyles: Record<string, any> = {};
+
+  if (shield.square) {
+    customSquareStyles[shield.square] = {
+      boxShadow: 'inset 0 0 0 3px rgba(56,189,248,0.85)',
+    };
+  }
+
+  // safe zone 3×3 highlight (สีเหลือง)
+  if (safeZone.square) {
+    const area = getArea3x3(safeZone.square);
+    Object.keys(area).forEach((sq) => {
+      customSquareStyles[sq] = {
+        ...(customSquareStyles[sq] || {}),
+        boxShadow:
+          'inset 0 0 0 3px rgba(250,204,21,0.75)', // เหลือง
+      };
+    });
+  }
+function describeBuffsOnSquare(
+  sq: string | null,
+  opts: {
+    shield: { by: 'w' | 'b' | null; square: string | null };
+    safeZone: { by: 'w' | 'b' | null; square: string | null };
+    pawnRange: Record<string, any>;
+    aoe: { by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null;
+  }
+): string[] {
+  if (!sq) return [];
+  const buffs: string[] = [];
+  const { shield, safeZone, pawnRange, aoe } = opts;
+
+  if (shield.square === sq) {
+    buffs.push('Shield: กันโดนกิน 1 เทิร์น');
+  }
+
+  if (pawnRange[sq]) {
+    buffs.push('Range Buff: เดิน 2 รอบ (ห้ามกิน)');
+  }
+
+  if (safeZone.square) {
+    const area = getArea3x3(safeZone.square);
+    if (area[sq]) {
+      buffs.push('Safe Zone: พื้นที่ปลอดภัย 3×3');
+    }
+  }
+
+  if (aoe?.center) {
+    const area = getArea3x3(aoe.center);
+    if (area[sq]) {
+      buffs.push(
+        `AOE Zone: พื้นที่ระเบิด (เหลือ ${aoe.remaining ?? '?'} เทิร์นของผู้ใช้)`
+      );
+    }
+  }
+
+  return buffs;
+}
+
+  // AOE center highlight (วงสีชมพู)
+    // AOE center highlight (วงสีชมพู)
+    // AOE 3×3 highlight (ชมพู)
+  if (aoe?.center) {
+    const area = getArea3x3(aoe.center);
+    Object.keys(area).forEach((sq) => {
+      customSquareStyles[sq] = {
+        ...(customSquareStyles[sq] || {}),
+        boxShadow: 'inset 0 0 0 3px rgba(244,114,182,0.9)',
+      };
+    });
+  }
+
+
+
+  if (swapFirstSquare) {
+    customSquareStyles[swapFirstSquare] = {
+      ...(customSquareStyles[swapFirstSquare] || {}),
+      boxShadow: 'inset 0 0 0 3px rgba(129,140,248,0.9)',
+    };
+  }
 
   return (
     <div className="min-h-screen p-4 md:p-8 grid gap-4 md:grid-cols-[1fr_320px]">
@@ -482,39 +885,52 @@ export default function RoomPage() {
               boardOrientation={color === 'black' ? 'black' : 'white'}
               showBoardNotation={false}
               animationDuration={150}
+              onMouseOverSquare={(sq: string) => {
+                setHoverSquare(sq);
+              }}
+              onMouseOutSquare={() => {
+                setHoverSquare(null);
+              }}
               arePiecesDraggable={
-                !isOver &&
-                !!meSide &&
-                turn === meSide &&
-                !selectingShield &&
-                !selectingCounterSac
+                !isOver && !!meSide && turn === meSide && !anySelecting
               }
               isDraggablePiece={({ piece }) => {
-                if (!meSide || turn !== meSide || selectingShield || selectingCounterSac)
-                  return false;
+                if (!meSide || turn !== meSide || anySelecting) return false;
                 const my = meSide === 'w' ? 'w' : 'b';
                 return piece.startsWith(my);
               }}
               onPieceDrop={(source: string, target: string) => {
-                if (selectingShield || selectingCounterSac) return false;
+                if (anySelecting) return false;
                 return !!handleMove({ from: source as Square, to: target as Square });
               }}
               onSquareClick={(sq: string) => {
                 const square = sq as Square;
                 if (selectingShield) return handleSquareClickForShield(square);
                 if (selectingCounterSac) return handleSquareClickForCounter(square);
+                if (selectingPawnRange) return handleSquareClickForPawnRange(square);
+                if (selectingSummonPawn) return handleSquareClickForSummon(square);
+                if (selectingSwap) return handleSquareClickForSwap(square);
+                if (selectingSafeZone) return handleSquareClickForSafeZone(square);
+                if (selectingAoe) return handleSquareClickForAoe(square);
               }}
               customBoardStyle={{ borderRadius: 12 }}
-              customSquareStyles={{
-                ...(shield.square
-                  ? {
-                      [shield.square]: {
-                        boxShadow: 'inset 0 0 0 3px rgba(56,189,248,0.85)',
-                      },
-                    }
-                  : {}),
-              }}
+              customSquareStyles={customSquareStyles}
             />
+             {hoverSquare && (
+            <div className="mt-1 text-xs text-gray-300 text-center">
+              <span className="font-mono mr-1">{hoverSquare}:</span>
+              {(() => {
+                const buffs = describeBuffsOnSquare(hoverSquare, {
+                  shield,
+                  safeZone,
+                  pawnRange,
+                  aoe,
+                });
+                if (!buffs.length) return 'ไม่มีบัพ';
+                return buffs.join(' | ');
+              })()}
+            </div>
+          )}
           </div>
         </div>
 
@@ -551,6 +967,19 @@ export default function RoomPage() {
               ? `${shield.square} (โดย ${shield.by === 'w' ? 'white' : 'black'})`
               : '-'}
           </div>
+          <div>
+            Safe zone center:{' '}
+            {safeZone.square
+              ? `${safeZone.square} (โดย ${safeZone.by === 'w' ? 'white' : 'black'})`
+              : '-'}
+          </div>
+          <div>
+            AOE:{' '}
+            {aoe?.center
+              ? `${aoe.center} (โดย ${aoe.by === 'w' ? 'white' : 'black'}, เหลือ ${aoe.remaining ?? '?'
+                } เทิร์นของเขา)`
+              : '-'}
+          </div>
           <div className="flex items-center gap-2">
             <input
               className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1"
@@ -566,17 +995,69 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {(selectingShield || selectingCounterSac) && (
+        {(selectingShield ||
+          selectingCounterSac ||
+          selectingPawnRange ||
+          selectingSummonPawn ||
+          selectingSwap ||
+          selectingSafeZone ||
+          selectingAoe) && (
           <div className="text-center text-sm -mt-2">
-            {selectingShield ? (
+            {selectingShield && (
               <span className="text-cyan-300">
-                โหมดโล่ป้องกัน: คลิกหมากของตัวเองเพื่อคุ้มกัน
-              </span>
-            ) : (
-              <span className="text-amber-300">
-                โต้กลับ: คลิก “หมากของคุณ (ยกเว้นราชา)” 1 ตัวเพื่อสละชีพแทน
+                SHIELD: คลิกหมากของตัวเองเพื่อคุ้มกัน
               </span>
             )}
+            {selectingCounterSac && !selectingShield && (
+              <span className="text-amber-300">
+                SACRIFICE: คลิกหมากของคุณ (ยกเว้นราชา) 1 ตัวเพื่อสละชีพ
+              </span>
+            )}
+            {selectingPawnRange &&
+              !selectingShield &&
+              !selectingCounterSac && (
+                <span className="text-emerald-300">
+                  PAWN RANGE+: คลิกเบี้ยของคุณ 1 ตัว
+                </span>
+              )}
+            {selectingSummonPawn &&
+              !selectingShield &&
+              !selectingCounterSac &&
+              !selectingPawnRange && (
+                <span className="text-lime-300">
+                  SUMMON PAWN: คลิกช่องว่างบนแถวตั้งต้นของฝั่งคุณ
+                </span>
+              )}
+            {selectingSwap &&
+              !selectingShield &&
+              !selectingCounterSac &&
+              !selectingPawnRange &&
+              !selectingSummonPawn && (
+                <span className="text-indigo-300">
+                  SWAP: คลิกหมากของคุณ 2 ตัวที่จะสลับตำแหน่ง
+                </span>
+              )}
+            {selectingSafeZone &&
+              !selectingShield &&
+              !selectingCounterSac &&
+              !selectingPawnRange &&
+              !selectingSummonPawn &&
+              !selectingSwap && (
+                <span className="text-yellow-300">
+                  SAFE ZONE: คลิกช่องใดก็ได้เพื่อเป็นศูนย์กลางโซนปลอดภัย 3×3
+                </span>
+              )}
+            {selectingAoe &&
+              !selectingShield &&
+              !selectingCounterSac &&
+              !selectingPawnRange &&
+              !selectingSummonPawn &&
+              !selectingSwap &&
+              !selectingSafeZone && (
+                <span className="text-pink-300">
+                  AOE BLAST: คลิกช่องใดก็ได้เพื่อเป็นศูนย์กลาง 3×3 สำหรับระเบิด
+                </span>
+              )}
           </div>
         )}
       </div>
