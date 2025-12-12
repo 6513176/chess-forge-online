@@ -1,10 +1,16 @@
 // cards.server.js (ESM version)
 import { Chess } from 'chess.js'
+
+/**
+ * รายการการ์ดทั้งหมด (26 ใบ)
+ *  - ถ้าต้องการเพิ่ม/ลด ให้แก้ที่นี่
+ */
 const ALL_CARD_IDS = [
   'BUFF_EXTRA_MOVE',
   'BUFF_EXTRA_MOVE',
   'BUFF_EXTRA_MOVE',
   'BUFF_EXTRA_MOVE',
+  'BUFF_EXTRA_MOVE',
 
   'BUFF_PAWN_RANGE',
   'BUFF_PAWN_RANGE',
@@ -30,7 +36,6 @@ const ALL_CARD_IDS = [
 
   'AOE_BLAST',
   'AOE_BLAST',
-
 
   'CLEANSE_BUFFS',
   'CLEANSE_BUFFS',
@@ -145,7 +150,7 @@ export function playCardOnServer({
       return { ok: true }
     }
 
-        case 'BUFF_PAWN_RANGE': {
+    case 'BUFF_PAWN_RANGE': {
       const sq = payload?.square
       if (!sq) return { ok: false, reason: 'need-target-square' }
 
@@ -170,7 +175,6 @@ export function playCardOnServer({
       })
       return { ok: true }
     }
-
 
     case 'BUFF_SUMMON_PAWN': {
       const sq = payload?.square
@@ -203,7 +207,7 @@ export function playCardOnServer({
       return { ok: true }
     }
 
-        case 'BUFF_SWAP_ALLY': {
+    case 'BUFF_SWAP_ALLY': {
       const a = payload?.a
       const b = payload?.b
       if (!a || !b) return { ok: false, reason: 'need-two-squares' }
@@ -226,10 +230,11 @@ export function playCardOnServer({
         return { ok: false, reason: 'pawn-cannot-swap-to-edge-rank' }
       }
 
+      // safer put: เอาแค่ข้อมูล {type, color} เวลา put
       ch.remove(a)
       ch.remove(b)
-      ch.put(pa, b)
-      ch.put(pb, a)
+      ch.put({ type: pa.type, color: pa.color }, b)
+      ch.put({ type: pb.type, color: pb.color }, a)
 
       const fenNew = ch.fen()
       st.fen = fenNew
@@ -247,7 +252,6 @@ export function playCardOnServer({
 
       return { ok: true }
     }
-
 
     // -------- ป้องกัน / Safe zone 3x3 --------
     case 'DEF_SHIELD': {
@@ -286,6 +290,8 @@ export function playCardOnServer({
     case 'AOE_BLAST': {
       const sq = payload?.square
       if (!sq) return { ok: false, reason: 'need-square' }
+
+      // ตั้งสถานะ AOE ดีเลย์ 2 เทิร์น (จะถูกจัดการใน server.js เมื่อเทิร์นเปลี่ยน)
       st.aoe = {
         by: side,
         center: sq,
@@ -299,6 +305,12 @@ export function playCardOnServer({
       io.to(roomId).emit('card:update', {
         aoe: st.aoe,
         cardPlayedBy: st.cardPlayedBy,
+      })
+
+      // log ลงแชทว่าฝั่งไหนวาง AOE ที่จุดไหน
+      io.to(roomId).emit('chat:message', {
+        from: 'system',
+        text: `AOE placed by ${side === 'w' ? 'White' : 'Black'} at ${sq} (detonates in 2 turns)`,
       })
 
       return { ok: true }

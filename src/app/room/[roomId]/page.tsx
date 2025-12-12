@@ -133,7 +133,8 @@ export default function RoomPage() {
   const [restartCounting, setRestartCounting] = useState(false);
   const [restartStartedAt, setRestartStartedAt] = useState<number | null>(null);
   const [restartDuration, setRestartDuration] = useState<number>(5);
-
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const [legalMovesMap, setLegalMovesMap] = useState<Record<string, boolean>>({});
   // clock จาก server
   const [timeLeft, setTimeLeft] = useState<{ w: number; b: number }>({
     w: INITIAL_TIME, // เดี๋ยว joinRoom จะทับด้วยค่าจริงจาก server
@@ -194,6 +195,8 @@ export default function RoomPage() {
 
   const [selectingAoe, setSelectingAoe] = useState(false);
   const [aoeCardUid, setAoeCardUid] = useState<string | null>(null);
+  const [deckCount, setDeckCount] = useState<number | null>(null);
+  const [graveyardCount, setGraveyardCount] = useState<number | null>(null);
 
   // chat
   const [chat, setChat] = useState<string[]>([]);
@@ -253,6 +256,9 @@ export default function RoomPage() {
         setTimeLeft({ w: res.clock.w, b: res.clock.b });
         setClockRunning(res.clock.running ?? null);
       }
+            // ซิงก์ deck counts ถ้ามี
+      if (typeof res.deckCount === 'number') setDeckCount(res.deckCount);
+      if (typeof res.graveyardCount === 'number') setGraveyardCount(res.graveyardCount);
 
       // handlers
       const onCardUpdate = (data: any) => {
@@ -264,26 +270,42 @@ export default function RoomPage() {
         if (data.cardPlayedBy !== undefined) setCardPlayedBy(data.cardPlayedBy);
       };
 
-      const onGameMove = ({ fenAfter, currentTurn }: any) => {
+            const onGameMove = ({ fenAfter, currentTurn }: any) => {
+        // อัปเดตกระดานจาก server -> โหลด FEN ใหม่
         gameRef.current.load(fenAfter);
         setFen(gameRef.current.fen());
         if (currentTurn) setTurn(currentTurn);
         setCheckSide(null);
+
+        // เคลียร์ selection / legal highlights ทุกครั้งที่มีการอัปเดตกระดานจาก server
+        setSelectedSquare(null);
+        setLegalMovesMap({});
       };
 
-      const onReject = ({ reason }: any) => {
+
+            const onReject = ({ reason }: any) => {
         alert('Move rejected: ' + reason);
         setFen(gameRef.current.fen());
+
+        // เคลียร์ selection (ถ้ามี) เพราะ move ถูก reject
+        setSelectedSquare(null);
+        setLegalMovesMap({});
       };
+
 
       const onChat = ({ text, from }: any) =>
         setChat((c) => [...c, `${from}: ${text}`]);
 
-      const onCounterResolved = ({ fen, currentTurn }: any) => {
+            const onCounterResolved = ({ fen, currentTurn }: any) => {
         gameRef.current.load(fen);
         setFen(gameRef.current.fen());
         if (currentTurn) setTurn(currentTurn);
+
+        // เคลียร์ selection เมื่อ counter ถูก resolve (board เปลี่ยน)
+        setSelectedSquare(null);
+        setLegalMovesMap({});
       };
+
 
       const onCheck = ({ sideInCheck }: any) => setCheckSide(sideInCheck);
 
@@ -300,7 +322,7 @@ export default function RoomPage() {
         setRestartStartedAt(s.startedAt ?? null);
       };
 
-      const onReset = ({ fen, currentTurn }: any) => {
+            const onReset = ({ fen, currentTurn }: any) => {
         if (!mounted) return;
         gameRef.current.load(fen);
         setFen(gameRef.current.fen());
@@ -310,8 +332,13 @@ export default function RoomPage() {
         setRestartVotes(new Set());
         setRestartCounting(false);
         setRestartStartedAt(null);
+
+        // เคลียร์ selection / legal highlights
+        setSelectedSquare(null);
+        setLegalMovesMap({});
         // เวลาใหม่จะถูกส่งมาทาง clock:update จาก server
       };
+
 
       // register
       socket.on('card:update', onCardUpdate);
@@ -357,6 +384,16 @@ export default function RoomPage() {
     socket.on('clock:update', onClockUpdate);
     return () => {
       socket.off('clock:update', onClockUpdate);
+    };
+  }, []);
+  useEffect(() => {
+    const onCardCounts = (payload: { deck: number; graveyard: number }) => {
+      setDeckCount(payload.deck);
+      setGraveyardCount(payload.graveyard);
+    };
+    socket.on('card:counts', onCardCounts);
+    return () => {
+      socket.off('card:counts', onCardCounts);
     };
   }, []);
 
@@ -765,20 +802,31 @@ export default function RoomPage() {
   // custom square styles (shield + safeZone 3x3 + AOE center + first swap)
   const customSquareStyles: Record<string, any> = {};
 
-  if (shield.square) {
-    customSquareStyles[shield.square] = {
-      boxShadow: 'inset 0 0 0 3px rgba(56,189,248,0.85)',
+    // --- selected square + legal moves highlighting ---
+  if (selectedSquare) {
+    customSquareStyles[selectedSquare] = {
+      ...(customSquareStyles[selectedSquare] || {}),
+      boxShadow: 'inset 0 0 0 4px rgba(96,165,100.95)', // blue ring สำหรับต้นทาง
     };
   }
 
-  // safe zone 3×3 highlight (สีเหลือง)
+  Object.keys(legalMovesMap).forEach((sq) => {
+  customSquareStyles[sq] = {
+    ...(customSquareStyles[sq] || {}),
+    backgroundColor: 'rgba(34,197,94,0.45)',  
+  };
+});
+
+
+
   if (safeZone.square) {
     const area = getArea3x3(safeZone.square);
     Object.keys(area).forEach((sq) => {
       customSquareStyles[sq] = {
         ...(customSquareStyles[sq] || {}),
         boxShadow:
-          'inset 0 0 0 3px rgba(250,204,21,0.75)', // เหลือง
+          'inset 0 0 0 3px rgba(250,204,21,0.75)', 
+          backgroundColor: 'rgba(250,204,94,0.45)',  
       };
     });
   }
@@ -821,6 +869,22 @@ function describeBuffsOnSquare(
 
   return buffs;
 }
+  // คืน object map ของช่องที่เดินไปได้ เช่น { e4: true, d5: true }
+  function computeLegalMovesFrom(square: Square | null) {
+  if (!square) return {};
+  try {
+    // บอก TS ว่า square เป็น Square
+    const moves = gameRef.current.moves({ square: square as Square, verbose: true }) as any[] | string[];
+    const out: Record<string, boolean> = {};
+    if (!moves) return out;
+    for (const m of moves as any[]) {
+      if (m && m.to) out[m.to] = true;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
   // AOE center highlight (วงสีชมพู)
     // AOE center highlight (วงสีชมพู)
@@ -830,7 +894,8 @@ function describeBuffsOnSquare(
     Object.keys(area).forEach((sq) => {
       customSquareStyles[sq] = {
         ...(customSquareStyles[sq] || {}),
-        boxShadow: 'inset 0 0 0 3px rgba(244,114,182,0.9)',
+        boxShadow: 'inset 0 0 0 3px rgba(244,114,182,1)',
+        backgroundColor: 'rgba(34,5,5,0.45)', 
       };
     });
   }
@@ -899,12 +964,21 @@ function describeBuffsOnSquare(
                 const my = meSide === 'w' ? 'w' : 'b';
                 return piece.startsWith(my);
               }}
-              onPieceDrop={(source: string, target: string) => {
+                            onPieceDrop={(source: string, target: string) => {
                 if (anySelecting) return false;
-                return !!handleMove({ from: source as Square, to: target as Square });
+                const ok = !!handleMove({ from: source as Square, to: target as Square });
+                // ถ้าทำสำเร็จ ให้ล้าง selection / legal highlights
+                if (ok) {
+                  setSelectedSquare(null);
+                  setLegalMovesMap({});
+                }
+                return ok;
               }}
-              onSquareClick={(sq: string) => {
+
+                            onSquareClick={(sq: string) => {
                 const square = sq as Square;
+
+                // ถ้าอยู่ในโหมดเลือกการ์ด ให้ไป handler การ์ดก่อน
                 if (selectingShield) return handleSquareClickForShield(square);
                 if (selectingCounterSac) return handleSquareClickForCounter(square);
                 if (selectingPawnRange) return handleSquareClickForPawnRange(square);
@@ -912,7 +986,55 @@ function describeBuffsOnSquare(
                 if (selectingSwap) return handleSquareClickForSwap(square);
                 if (selectingSafeZone) return handleSquareClickForSafeZone(square);
                 if (selectingAoe) return handleSquareClickForAoe(square);
+
+                // ถ้าไม่ใช่โหมดการ์ด: เลือกหมาก / เดินผ่านคลิก
+                // ถ้าไม่มีสิทธิ์ (ไม่ใช่เทิร์นเรา) ปิดการเลือก
+                if (!meSide || turn !== meSide) {
+                  setSelectedSquare(null);
+                  setLegalMovesMap({});
+                  return;
+                }
+
+                const piece: any = gameRef.current.get(square as any);
+
+                // ถ้ามี selection อยู่แล้ว
+                if (selectedSquare) {
+                  // คลิกที่ช่องเดิม → ยกเลิก selection
+                  if (selectedSquare === square) {
+                    setSelectedSquare(null);
+                    setLegalMovesMap({});
+                    return;
+                  }
+
+                  // ถ้าคลิกที่ช่องเป้าจาก legalMoves → เดิน
+                  if (legalMovesMap[square]) {
+                    // เรียก handleMove (จะตรวจสิทธิ์อีกชั้นที่ server)
+                    handleMove({ from: selectedSquare, to: square });
+                    setSelectedSquare(null);
+                    setLegalMovesMap({});
+                    return;
+                  }
+
+                  // ถ้าคลิกหมากของเราอื่นๆ → เปลี่ยน selection
+                  if (piece && piece.color === meSide) {
+                    setSelectedSquare(square);
+                    setLegalMovesMap(computeLegalMovesFrom(square));
+                    return;
+                  }
+
+                  // คลิกที่อื่นที่ไม่ใช่เป้า → ยกเลิก
+                  setSelectedSquare(null);
+                  setLegalMovesMap({});
+                  return;
+                }
+
+                // ถ้ายังไม่มี selection: ถ้าคลิกหมากของเรา ให้ select
+                if (piece && piece.color === meSide) {
+                  setSelectedSquare(square);
+                  setLegalMovesMap(computeLegalMovesFrom(square));
+                }
               }}
+
               customBoardStyle={{ borderRadius: 12 }}
               customSquareStyles={customSquareStyles}
             />
@@ -935,7 +1057,9 @@ function describeBuffsOnSquare(
         </div>
 
         {/* CARDS */}
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0"><div>
+            Deck: {deckCount ?? '-'} | Graveyard: {graveyardCount ?? '-'}
+          </div>
           <h3 className="font-semibold mb-2">การ์ดของฉัน</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {hand.map((c) => (
@@ -958,28 +1082,7 @@ function describeBuffsOnSquare(
 
         {/* STATUS + INVITE */}
         <div className="text-sm opacity-80 space-y-1 flex-shrink-0">
-          <div>
-            Extra move เหลือ: W {extraMove.w} / B {extraMove.b}
-          </div>
-          <div>
-            Shield:{' '}
-            {shield.square
-              ? `${shield.square} (โดย ${shield.by === 'w' ? 'white' : 'black'})`
-              : '-'}
-          </div>
-          <div>
-            Safe zone center:{' '}
-            {safeZone.square
-              ? `${safeZone.square} (โดย ${safeZone.by === 'w' ? 'white' : 'black'})`
-              : '-'}
-          </div>
-          <div>
-            AOE:{' '}
-            {aoe?.center
-              ? `${aoe.center} (โดย ${aoe.by === 'w' ? 'white' : 'black'}, เหลือ ${aoe.remaining ?? '?'
-                } เทิร์นของเขา)`
-              : '-'}
-          </div>
+                  
           <div className="flex items-center gap-2">
             <input
               className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1"
