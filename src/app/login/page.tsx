@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { auth, googleProvider, signInWithPopup, signInAnonymously } from '@/app/lib/firebase';
+import { auth, googleProvider, signInWithPopup } from '@/app/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 function LoginPageContent() {
@@ -35,18 +35,6 @@ function LoginPageContent() {
     } catch (err: any) {
       console.error(err);
       setError('Login failed: ' + err.message);
-      setLoading(false);
-    }
-  };
-
-  const loginAsGuest = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      await signInAnonymously(auth);
-    } catch (err: any) {
-      console.error(err);
-      setError('Guest login failed: ' + err.message);
       setLoading(false);
     }
   };
@@ -90,17 +78,6 @@ function LoginPageContent() {
           Continue with Google
         </button>
         
-        <button
-          onClick={loginAsGuest}
-          className="w-full mt-3 flex items-center justify-center gap-3 px-6 py-4 bg-gray-800 text-white font-semibold rounded-2xl hover:bg-gray-700 transition-all shadow-lg active:scale-[0.98] border border-gray-700 hover:border-gray-500"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-          Play as Guest
-        </button>
-
         <p className="text-xs text-gray-500 max-w-xs mx-auto">
           Your name and profile picture will only be used for display in the lobby and chat.
         </p>

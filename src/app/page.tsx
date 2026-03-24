@@ -157,7 +157,7 @@ export default function Home() {
             
             {!user && !loadingUser && (
                <div className="mt-6 text-sm text-slate-500">
-                 You must <button onClick={() => router.push('/login')} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4">sign in or play as guest</button> to create a room.
+                 You must <button onClick={() => router.push('/login')} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4">sign in</button> to create a room.
                </div>
             )}
           </div>
