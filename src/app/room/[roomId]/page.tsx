@@ -1027,7 +1027,7 @@ function describeBuffsOnSquare(
           </div>
         </div>
 
-        <div className="w-full max-w-[560px] aspect-square mx-auto self-center">
+        <div className="w-full max-w-[90vw] sm:max-w-[560px] max-h-[45vh] sm:max-h-none aspect-square mx-auto self-center flex items-center justify-center">
           <div className="w-full h-full relative">
             <Chessboard
               id="room-board"
@@ -1165,8 +1165,8 @@ function describeBuffsOnSquare(
                   }}
                   className={`relative shrink-0 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 snap-center
                     ${isLocked 
-                      ? 'w-56 h-80 z-50 -translate-y-6 shadow-[0_30px_60px_-15px_rgba(99,102,241,0.6)] border-2 border-indigo-400 scale-105 mx-2' 
-                      : `w-44 h-64 ${playable ? 'cursor-pointer hover:-translate-y-4 hover:shadow-[0_20px_40px_-15px_rgba(99,102,241,0.5)] border border-indigo-500/40 hover:border-indigo-400' : 'cursor-not-allowed opacity-60 grayscale-[50%] border border-gray-700'}`
+                      ? 'w-40 h-56 sm:w-48 sm:h-72 md:w-56 md:h-80 z-50 -translate-y-4 md:-translate-y-6 shadow-[0_30px_60px_-15px_rgba(99,102,241,0.6)] border-2 border-indigo-400 scale-105 mx-1 md:mx-2' 
+                      : `w-28 h-40 sm:w-36 sm:h-52 md:w-44 md:h-64 ${playable ? 'cursor-pointer hover:-translate-y-2 md:hover:-translate-y-4 hover:shadow-[0_20px_40px_-15px_rgba(99,102,241,0.5)] border border-indigo-500/40 hover:border-indigo-400' : 'cursor-not-allowed opacity-60 grayscale-[50%] border border-gray-700'}`
                     }
                     group bg-gray-900 flex flex-col justify-between
                   `}
@@ -1184,10 +1184,10 @@ function describeBuffsOnSquare(
 
                   <div className="relative z-20 p-4 flex flex-col h-full justify-between pointer-events-none">
                     <div>
-                      <div className="font-extrabold text-xl text-white tracking-wide uppercase drop-shadow-md" style={{textShadow: "0 2px 4px rgba(0,0,0,0.8)"}}>{c.name}</div>
+                      <div className="font-extrabold text-sm sm:text-base md:text-xl text-white tracking-wide uppercase drop-shadow-md" style={{textShadow: "0 2px 4px rgba(0,0,0,0.8)"}}>{c.name}</div>
                       
                       {/* Description only visible when locked */}
-                      <div className={`text-xs text-slate-200 mt-2 font-medium leading-relaxed drop-shadow-md bg-black/50 p-2.5 rounded-lg backdrop-blur-md border border-white/10 transition-opacity duration-300 ${isLocked ? 'opacity-100' : 'opacity-0 hidden'}`} style={{textShadow: "0 1px 2px rgba(0,0,0,0.8)"}}>
+                      <div className={`text-[10px] sm:text-xs text-slate-200 mt-1 md:mt-2 font-medium leading-relaxed md:leading-relaxed drop-shadow-md bg-black/50 p-1.5 md:p-2.5 rounded-lg backdrop-blur-md border border-white/10 transition-opacity duration-300 ${isLocked ? 'opacity-100' : 'opacity-0 hidden'}`} style={{textShadow: "0 1px 2px rgba(0,0,0,0.8)"}}>
                         {c.desc}
                       </div>
                     </div>
