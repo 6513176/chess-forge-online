@@ -357,21 +357,7 @@ export default function RoomPage() {
 
             const onReset = ({ fen, currentTurn }: any) => {
         if (!mounted) return;
-        gameRef.current.load(fen);
-        setFen(gameRef.current.fen());
-        setTurn(currentTurn);
-        setIsOver(false);
-        setResult(null);
-        setRestartVotes(new Set());
-        setRestartCounting(false);
-        setRestartStartedAt(null);
-        setHasSubmittedSurvey(false);
-        setCardsPlayedLog([]);
-
-        // เคลียร์ selection / legal highlights
-        setSelectedSquare(null);
-        setLegalMovesMap({});
-        // เวลาใหม่จะถูกส่งมาทาง clock:update จาก server
+        window.location.reload();
       };
 
 
