@@ -1018,6 +1018,13 @@ function describeBuffsOnSquare(
                 Resign 🏳️
               </button>
             )}
+            <button
+              onClick={() => window.location.href = '/'}
+              className="px-3 py-1 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 font-bold transition font-mono shadow-sm border border-slate-600 ml-2"
+              style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
+            >
+              Home 🏠
+            </button>
           </div>
         </div>
 
@@ -1419,6 +1426,12 @@ function describeBuffsOnSquare(
                       : 'Waiting for opponent...'}
                   </button>
                 )}
+                <button
+                  onClick={() => window.location.href = '/'}
+                  className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 font-bold transition shadow-sm border border-slate-600 text-white ml-2"
+                >
+                  Back to Home
+                </button>
               </div>
             </div>
 
