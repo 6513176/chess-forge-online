@@ -982,7 +982,7 @@ function describeBuffsOnSquare(
     <div className="min-h-screen p-4 md:p-8 grid gap-4 md:grid-cols-[1fr_320px]">
       {/* LEFT */}
       <div className="bg-gray-900 rounded-2xl p-4 text-white flex flex-col gap-3">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap justify-between items-center gap-2">
           <div>
             Room: <span className="font-mono">{String(roomId)}</span>
           </div>
@@ -1027,11 +1027,10 @@ function describeBuffsOnSquare(
           </div>
         </div>
 
-        <div className="self-center" style={{ width: 560, height: 560 }}>
-          <div className="w-[560px] h-[560px]">
+        <div className="w-full max-w-[560px] aspect-square mx-auto self-center">
+          <div className="w-full h-full relative">
             <Chessboard
               id="room-board"
-              boardWidth={560}
               position={fen}
               boardOrientation={color === 'black' ? 'black' : 'white'}
               showBoardNotation={false}
@@ -1266,7 +1265,7 @@ function describeBuffsOnSquare(
       </div>
 
       {/* RIGHT: chat */}
-      <div className="bg-gray-900 rounded-2xl p-4 text-white flex flex-col h-[560px]">
+      <div className="bg-gray-900 rounded-2xl p-4 text-white flex flex-col h-[400px] md:h-[560px]">
         <div className="font-semibold">Chat</div>
         <div className="flex-1 overflow-y-auto mt-2 space-y-1">
           {chat.map((line, i) => (
