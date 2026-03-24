@@ -1263,20 +1263,7 @@ function describeBuffsOnSquare(
                               SELECT TARGET
                             </div>
                           )}
-                          <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                confirmPendingTarget();
-                              }}
-                              className="w-full font-bold px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-[1.02] transition-all animate-in fade-in zoom-in duration-200"
-                            >
-                              {Object.keys(pendingTarget.payload).length === 0 ? 'CONFIRM USE' : 'CONFIRM TARGET'}
-                            </button>
-                          ) : (
-                            <div className="w-full text-center font-bold px-3 py-2 rounded-xl border-2 border-dashed border-indigo-500/50 bg-indigo-500/10 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.2)]">
-                              SELECT TARGET
-                            </div>
-                          )}
+                          
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
