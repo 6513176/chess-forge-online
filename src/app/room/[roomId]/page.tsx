@@ -69,7 +69,7 @@ const CARD_DEFS: Card[] = [
   },
   {
     id: 'AOE_BLAST',
-    name: 'AOE BLAST',
+    name: 'RNG BLAST',
     desc: 'Randomly destroy 1 piece in a 3x3 area after 2 of your turns',
   },
   {

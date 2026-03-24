@@ -26,7 +26,7 @@ const cardName = (id) => {
     case 'BUFF_SUMMON_PAWN': return 'Summon Pawn';
     case 'BUFF_SWAP_ALLY': return 'Swap';
     case 'DEF_SAFE_ZONE': return 'Safe Zone';
-    case 'AOE_BLAST': return 'AOE Blast';
+    case 'AOE_BLAST': return 'RNG Blast';
     case 'CLEANSE_BUFFS': return 'Cleanse';
     default: return id;
   }

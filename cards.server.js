@@ -331,7 +331,7 @@ export function playCardOnServer({
 
       io.to(roomId).emit('chat:message', {
         from: 'system',
-        text: `AOE placed by ${side === 'w' ? 'White' : 'Black'} at ${sq} (detonates next turn)`,
+        text: `RNG Blast placed by ${side === 'w' ? 'White' : 'Black'} at ${sq} (detonates next turn)`,
       })
 
       return { ok: true }
@@ -449,7 +449,7 @@ export function resolveAoe(roomId, st, io) {
   if (!targets.length) {
     io.to(roomId).emit('chat:message', {
       from: 'system',
-      text: `AOE at ${sq} detonated but found no valid targets.`,
+      text: `RNG Blast at ${sq} detonated but found no valid targets.`,
     });
   } else {
     const idx = Math.floor(Math.random() * targets.length);
@@ -481,7 +481,7 @@ export function resolveAoe(roomId, st, io) {
 
     io.to(roomId).emit('chat:message', {
       from: 'system',
-      text: `AOE BLAST at ${sq} destroyed ${sideName} ${pt} at ${victimSq}`,
+      text: `RNG BLAST at ${sq} destroyed ${sideName} ${pt} at ${victimSq}`,
     });
   }
 
