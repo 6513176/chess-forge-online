@@ -189,6 +189,7 @@ export default function RoomPage() {
     }
   );
   const [pawnRange, setPawnRange] = useState<Record<string, boolean>>({}); // { square: true }
+  const [hitAndRunActiveSquare, setHitAndRunActiveSquare] = useState<string | null>(null);
   const [aoe, setAoe] = useState<{ by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null>(
     null
   );
@@ -276,6 +277,7 @@ export default function RoomPage() {
       if (res.shield) setShield(res.shield);
       if (res.safeZone) setSafeZone(res.safeZone);
       if (res.pawnRange) setPawnRange(res.pawnRange);
+      if (res.hitAndRunActiveSquare !== undefined) setHitAndRunActiveSquare(res.hitAndRunActiveSquare);
       if (res.aoe) setAoe(res.aoe);
       if (res.cardPlayedBy !== undefined) setCardPlayedBy(res.cardPlayedBy);
 
@@ -299,6 +301,7 @@ export default function RoomPage() {
         if (data.shield) setShield(data.shield);
         if (data.safeZone) setSafeZone(data.safeZone);
         if (data.pawnRange) setPawnRange(data.pawnRange);
+        if (data.hitAndRunActiveSquare !== undefined) setHitAndRunActiveSquare(data.hitAndRunActiveSquare);
         if (data.aoe !== undefined) setAoe(data.aoe || null);
         if (data.cardPlayedBy !== undefined) setCardPlayedBy(data.cardPlayedBy);
       };
@@ -845,6 +848,14 @@ export default function RoomPage() {
 
 
 
+  if (hitAndRunActiveSquare) {
+    customSquareStyles[hitAndRunActiveSquare] = {
+      ...(customSquareStyles[hitAndRunActiveSquare] || {}),
+      boxShadow: 'inset 0 0 15px 4px rgba(234,88,12,0.8)', // orange glow
+      backgroundColor: 'rgba(234,88,12,0.3)',
+    };
+  }
+
   if (safeZone.square) {
     const area = getArea3x3(safeZone.square);
     Object.keys(area).forEach((sq) => {
@@ -874,19 +885,31 @@ function describeBuffsOnSquare(
     shield: { by: 'w' | 'b' | null; square: string | null };
     safeZone: { by: 'w' | 'b' | null; square: string | null };
     pawnRange: Record<string, any>;
+    hitAndRunActiveSquare: string | null;
     aoe: { by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null;
   }
 ): string[] {
   if (!sq) return [];
   const buffs: string[] = [];
-  const { shield, safeZone, pawnRange, aoe } = opts;
+  const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare } = opts;
 
   if (shield.square === sq) {
     buffs.push('Shield: กันโดนกิน 1 เทิร์น');
   }
 
   if (pawnRange[sq]) {
-    buffs.push('Range Buff: เดิน 2 รอบ (ห้ามกิน)');
+    buffs.push('Range Buff: เดิน 2 รอบ (ก้าวที่สองห้ามกิน)');
+  }
+  if (hitAndRunActiveSquare === sq) {
+    buffs.push('กำลังเดินรอบ 2 (ห้ามกิน/ห้ามเดินตัวอื่น)');
+  }
+
+  if (hitAndRunActiveSquare) {
+    customSquareStyles[hitAndRunActiveSquare] = {
+      ...(customSquareStyles[hitAndRunActiveSquare] || {}),
+      boxShadow: 'inset 0 0 15px 4px rgba(234,88,12,0.8)', // orange glow
+      backgroundColor: 'rgba(234,88,12,0.3)',
+    };
   }
 
   if (safeZone.square) {
@@ -1039,6 +1062,10 @@ function describeBuffsOnSquare(
               }}
                             onPieceDrop={(source: string, target: string) => {
                 if (anySelecting) return false;
+                if (hitAndRunActiveSquare && source !== hitAndRunActiveSquare) {
+                   alert('You must move the active hit and run piece.');
+                   return false;
+                }
                 const ok = !!handleMove({ from: source as Square, to: target as Square });
                 // ถ้าทำสำเร็จ ให้ล้าง selection / legal highlights
                 if (ok) {
@@ -1119,6 +1146,7 @@ function describeBuffsOnSquare(
                   shield,
                   safeZone,
                   pawnRange,
+                  hitAndRunActiveSquare,
                   aoe,
                 });
                 if (!buffs.length) return 'No buffs';

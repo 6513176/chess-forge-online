@@ -346,6 +346,7 @@ export function playCardOnServer({
       st.pawnRange = {}
       st.noKingBy = null
       st.aoe = null
+      st.hitAndRunActiveSquare = null
 
       st.cardPlayedBy = side
 
@@ -358,6 +359,7 @@ export function playCardOnServer({
         safeZone: st.safeZone,
         pawnRange: st.pawnRange,
         aoe: st.aoe,
+        hitAndRunActiveSquare: st.hitAndRunActiveSquare,
         noKingBy: st.noKingBy,
         cardPlayedBy: st.cardPlayedBy,
       })

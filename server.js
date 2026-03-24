@@ -81,6 +81,7 @@ function freshRoomState() {
 
     // บัพ/โซน
     pawnRange: {}, // { 'e4': true }
+    hitAndRunActiveSquare: null,
     safeZone: { by: null, square: null }, // center ของโซน 3x3
     aoe: null, // { by, center, remaining }
 
@@ -271,6 +272,7 @@ io.on('connection', (socket) => {
         shield: st.shield,
         safeZone: st.safeZone,
         pawnRange: st.pawnRange,
+        hitAndRunActiveSquare: st.hitAndRunActiveSquare,
         aoe: st.aoe,
         cardPlayedBy: st.cardPlayedBy,
         clock: st.clock
@@ -385,7 +387,8 @@ io.on('connection', (socket) => {
 
           io.to(roomId).emit('card:update', {
             cardPlayedBy: st.cardPlayedBy,
-            noKingBy: st.noKingBy,
+          noKingBy: st.noKingBy,
+          hitAndRunActiveSquare: null,
             shield: st.shield,
             safeZone: st.safeZone
           });
@@ -505,7 +508,7 @@ io.on('connection', (socket) => {
       const pieceHasRangeBuff = !!(st.pawnRange && st.pawnRange[move.from]);
       
       // ให้สิทธิ์เดินเบี้ยอีกครั้งเฉพาะเกมที่ยังไม่ได้ใช้โควต้า Range Buff ในเทิร์นนี้
-      const usedRangeBuff = pieceHasRangeBuff && !st.rangeBuffUsedThisTurn;
+      const usedRangeBuff = pieceHasRangeBuff && !st.hitAndRunActiveSquare;
 
       if (hadExtra || usedRangeBuff) {
         // ✅ ตานี้ยังเป็นฝั่งเดิม (ได้เดินต่ออีก 1 ครั้ง)
@@ -517,18 +520,19 @@ io.on('connection', (socket) => {
             noKingBy: st.noKingBy,
           });
         } else if (usedRangeBuff) {
-          st.rangeBuffUsedThisTurn = true; // บันทึกว่าเบี้ยตัวนี้ใช้สิทธิ์เดินก้าวเสริมในรอบนี้ไปแล้ว
+          st.hitAndRunActiveSquare = move.to; io.to(roomId).emit('card:update', { hitAndRunActiveSquare: st.hitAndRunActiveSquare });
         }
       } else {
         // เปลี่ยนเทิร์นตามปกติ
         st.turn = opp(st.turn);
         st.cardPlayedBy = null;
         st.noKingBy = null;
-        st.rangeBuffUsedThisTurn = false; // คืนสิทธิ์เดิน 2 ก้าวบัพเบี้ย ให้รีเซ็ตเมื่อจบรอบ
+        st.hitAndRunActiveSquare = null;
         st.isExtraMovePhase[side] = false;
         io.to(roomId).emit('card:update', {
           cardPlayedBy: st.cardPlayedBy,
           noKingBy: st.noKingBy,
+          hitAndRunActiveSquare: null,
         });
 
         // โล่หมดอายุเมื่อเทิร์นวนกลับมาหาผู้ลงโล่
