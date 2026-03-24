@@ -50,7 +50,7 @@ function createNewDeck() {
   const arr = [...ALL_CARD_IDS]
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr // CardId[]
 }
@@ -317,7 +317,7 @@ export function playCardOnServer({
       st.aoe = {
         by: side,
         center: sq,
-        remaining: 2, 
+        remaining: 2,
       }
       st.cardPlayedBy = side
 
@@ -437,7 +437,7 @@ export function resolveAoe(roomId, st, io) {
       const r = rank + dr;
       if (f < 97 || f > 104) continue;
       if (r < 1 || r > 8) continue;
-      
+
       const checkSq = String.fromCharCode(f) + r;
       const p = ch.get(checkSq);
       if (p && p.type !== 'k') {

@@ -1436,7 +1436,7 @@ function describeBuffsOnSquare(
           const uid = user?.displayName || user?.uid || 'guest';
           socket.emit('game:summary_report', {
             roomId,
-            userId: uid,
+            userId: uid, email: user?.email || null,
             timeLeft: timeL,
             cardsPlayed: cardsPlayedLog,
             connectionTimeMs,
@@ -1449,7 +1449,7 @@ function describeBuffsOnSquare(
           const uid = user?.displayName || user?.uid || 'guest';
           socket.emit('game:summary_report', {
             roomId,
-            userId: uid,
+            userId: uid, email: user?.email || null,
             timeLeft: timeL,
             cardsPlayed: cardsPlayedLog,
             connectionTimeMs,

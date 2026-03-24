@@ -674,7 +674,7 @@ io.on('connection', (socket) => {
     try {
       const { 
         roomId, 
-        userId, 
+        userId, email,
         timeLeft, 
         cardsPlayed, 
         connectionTimeMs, 
@@ -690,7 +690,7 @@ io.on('connection', (socket) => {
 
 const payload = {
         roomId,
-        enemyUserId,
+        email,
         userId: userId && userId !== 'guest' ? userId : socket.id,
         socketId: socket.id,
         timeLeftSeconds: timeLeft,

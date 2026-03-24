@@ -215,11 +215,11 @@ export default function Home() {
                     <span className="font-bold text-rose-400 block mb-1">Red (Aggression)</span>
                     <span className="text-xs text-slate-400 block">Hit & Run: Move twice (cannot capture on 2nd step).</span>
                     <span className="text-xs text-slate-400 block">Forge: Gain an extra turn (cannot capture King).</span>
-                    <span className="text-xs text-slate-400 block">AOE: Explodes a 3x3 area after 1 turn.</span>
+                    <span className="text-xs text-slate-400 block">RNG blast: destroy a random piece in 3x3 area.</span>
                   </div>
                   <div className="bg-white/5 border border-sky-500/20 p-3 rounded-xl">
                     <span className="font-bold text-sky-400 block mb-1">Blue (Defense)</span>
-                    <span className="text-xs text-slate-400 block">Shield: Protects a 3x3 area. Safe Zone: 3x3 immunity area.</span>
+                    <span className="text-xs text-slate-400 block">Shield: Protects a piece for 1 turn. Safe Zone: 3x3 immunity area.</span>
                     <span className="text-xs text-slate-400 block">Cleanse: Removes all buffs/debuffs from board.</span>
                   </div>
                   <div className="bg-white/5 border border-amber-500/20 p-3 rounded-xl sm:col-span-2">
