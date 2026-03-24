@@ -46,13 +46,12 @@ const GEQ_QUESTIONS = [
 ];
 
 interface Props {
-  roomId: string;
   isOpen: boolean;
   onSubmit: (answers: Record<string, number>) => void;
   onClose: () => void;
 }
 
-export default function ExperienceSurvey({ roomId, isOpen, onSubmit, onClose }: Props) {
+export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [answers, setAnswers] = useState<Record<string, number>>({});
 

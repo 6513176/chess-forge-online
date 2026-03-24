@@ -1371,7 +1371,6 @@ function describeBuffsOnSquare(
       )}
 
       <ExperienceSurvey 
-        roomId={roomId as string}
         isOpen={isOver && !hasSubmittedSurvey}
         onSubmit={(answers) => {
           const timeL = meSide === 'w' ? timeLeft.w : timeLeft.b;

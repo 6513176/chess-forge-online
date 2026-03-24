@@ -12,7 +12,7 @@ export function ensureConnected(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (socket.connected) return resolve();
     const ok = () => { cleanup(); resolve(); };
-    const err = (e: any) => { cleanup(); reject(e); };
+    const err = (e: Error) => { cleanup(); reject(e); };
     const cleanup = () => {
       socket.off('connect', ok);
       socket.off('connect_error', err);
@@ -39,7 +39,7 @@ type JoinRoomErr = { ok: false; reason: string };
 export async function joinRoom(roomId: string): Promise<JoinRoomOk | JoinRoomErr> {
   await ensureConnected();
   return new Promise((resolve) => {
-    socket.emit('joinRoom', roomId, (res: any) => {
+    socket.emit('joinRoom', roomId, (res: JoinRoomOk & { reason?: string }) => {
       if (res?.ok) {
         resolve({
           ok: true,
@@ -60,7 +60,7 @@ export async function joinRoom(roomId: string): Promise<JoinRoomOk | JoinRoomErr
 export async function createRoom(): Promise<{ ok: boolean; roomId?: string; reason?: string }> {
   await ensureConnected();
   return new Promise((resolve) => {
-    socket.emit('createRoom', (res: any) => {
+    socket.emit('createRoom', (res: { ok: boolean; roomId?: string; reason?: string }) => {
       if (res?.ok) resolve({ ok: true, roomId: res.roomId });
       else resolve({ ok: false, reason: res?.reason || 'create-failed' });
     });
