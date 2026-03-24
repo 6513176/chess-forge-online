@@ -51,7 +51,7 @@ export default function Home() {
   }
 
   return (
-    <div 
+    <div
       className="relative min-h-screen bg-[#030712] text-slate-200 overflow-hidden font-sans selection:bg-indigo-500/30 bg-cover bg-center bg-no-repeat"
       style={{ backgroundImage: "url('/bg.png')" }}
     >
@@ -99,9 +99,9 @@ export default function Home() {
 
       {/* Main Hero Content */}
       <main className="relative pt-32 pb-16 px-4 sm:px-6 flex flex-col items-center justify-center min-h-screen z-10">
-        
+
         <div className="max-w-3xl w-full text-center space-y-8">
-          
+
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-semibold tracking-wide uppercase shadow-[0_0_15px_rgba(99,102,241,0.2)]">
               <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
@@ -126,7 +126,7 @@ export default function Home() {
                   <span className="animate-pulse">Creating...</span>
                 ) : (
                   <>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
                     Create Room
                   </>
                 )}
@@ -140,7 +140,7 @@ export default function Home() {
                   placeholder="Room Code..."
                   className="w-full bg-transparent px-4 py-4 text-white outline-none placeholder:text-slate-500 font-mono"
                 />
-                <button 
+                <button
                   onClick={onJoin}
                   className="px-5 bg-white/5 hover:bg-white/10 border-l border-white/5 transition-colors font-medium text-slate-300 hover:text-white"
                 >
@@ -151,23 +151,23 @@ export default function Home() {
 
             {err && (
               <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                 {err}
               </div>
             )}
-            
+
             {!user && !loadingUser && (
-               <div className="mt-6 text-sm text-slate-500">
-                 You must <button onClick={() => router.push('/login')} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4">sign in</button> to create a room.
-               </div>
+              <div className="mt-6 text-sm text-slate-500">
+                You must <button onClick={() => router.push('/login')} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4">sign in</button> to create a room.
+              </div>
             )}
-            
+
             <div className="mt-8">
               <button
                 onClick={() => setShowRules(true)}
                 className="px-6 py-2 rounded-full border border-slate-500/30 text-slate-300 hover:text-white hover:bg-white/5 hover:border-slate-500/50 transition-all text-sm font-medium tracking-wide"
               >
-                📖 How to Play & Rules
+                How to Play & Rules
               </button>
             </div>
           </div>
@@ -183,26 +183,28 @@ export default function Home() {
               onClick={() => setShowRules(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full hover:bg-white/10 transition-colors"
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
-            
+
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-              <span className="text-indigo-400">⚡</span> Rules of Chess Forge
+              <span className="text-indigo-400"></span> Rules of Chess Forge
             </h2>
-            
+
             <div className="space-y-6 text-slate-300 text-sm sm:text-base max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               <div className="space-y-2">
-                <h3 className="text-lg font-semibold text-indigo-300">⚔️ Core Gameplay</h3>
+                <h3 className="text-lg font-semibold text-indigo-300">Core Gameplay</h3>
                 <p>Chess Forge plays like standard chess, but with a twist: each player drafts and plays magical cards that bend the rules of the game.</p>
                 <ul className="list-disc pl-5 space-y-1 text-slate-400">
+                  <li>You can get a card by capturing every 2 pieces.</li>
+                  <li>7 minute playtime.</li>
                   <li>Standard chess movement and capture rules apply.</li>
-                  <li>Checkmate or capturing the King wins the game.</li>
+                  <li>Checkmate to win the game.</li>
                 </ul>
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-lg font-semibold text-rose-400">🃏 Playing Cards</h3>
-                <p>You can play <strong className="text-white">ONE sequence-changing card per turn</strong>.</p>
+                <h3 className="text-lg font-semibold text-rose-400">Playing Cards</h3>
+                <p>You can play <strong className="text-white">ONE card per turn</strong>.</p>
                 <ul className="list-disc pl-5 space-y-1 text-slate-400">
                   <li>Click a card in your hand to select it, pick a target on the board if required, and click <strong className="text-emerald-400">CONFIRM</strong>.</li>
                   <li>Playing a card does <strong className="underline text-white">not</strong> consume your piece movement turn (unless the card specifically says it ends your turn).</li>
@@ -210,7 +212,7 @@ export default function Home() {
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-amber-400">🔮 Card Archetypes</h3>
+                <h3 className="text-lg font-semibold text-amber-400">Card Archetypes</h3>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="bg-white/5 border border-rose-500/20 p-3 rounded-xl">
                     <span className="font-bold text-rose-400 block mb-1">Red (Aggression)</span>
