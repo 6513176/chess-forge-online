@@ -716,6 +716,8 @@ io.on('connection', (socket) => {
         st.restart.timer = setTimeout(() => {
           const newState = resetRoomInPlace(st);
           rooms.set(roomId, newState);
+          syncHandToSide(roomId, 'w');
+          syncHandToSide(roomId, 'b');
 
           const startFen = new Chess().fen();
           newState.fen = startFen;

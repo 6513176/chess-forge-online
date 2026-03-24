@@ -365,6 +365,8 @@ export default function RoomPage() {
         setRestartVotes(new Set());
         setRestartCounting(false);
         setRestartStartedAt(null);
+        setHasSubmittedSurvey(false);
+        setCardsPlayedLog([]);
 
         // เคลียร์ selection / legal highlights
         setSelectedSquare(null);
