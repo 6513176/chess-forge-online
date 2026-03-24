@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { auth, googleProvider, signInWithPopup, signInAnonymously } from '@/app/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectParams = searchParams?.get('redirect') || '/';
@@ -106,5 +106,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">Loading...</div>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
