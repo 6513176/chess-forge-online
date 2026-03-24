@@ -63,7 +63,7 @@ export default function Home() {
 
       {/* Navigation Bar */}
       <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-black/20 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Chess Forge Logo" className="w-10 h-10 object-contain drop-shadow-md" />
             <span className="font-bold text-xl tracking-tight text-white drop-shadow-sm">ChessForge</span>
@@ -97,7 +97,7 @@ export default function Home() {
       </nav>
 
       {/* Main Hero Content */}
-      <main className="relative pt-32 pb-16 px-6 flex flex-col items-center justify-center min-h-screen z-10">
+      <main className="relative pt-32 pb-16 px-4 sm:px-6 flex flex-col items-center justify-center min-h-screen z-10">
         
         <div className="max-w-3xl w-full text-center space-y-8">
           
@@ -106,7 +106,7 @@ export default function Home() {
               <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
               Live Multiplayer
             </div>
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500">
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500">
               Forge Your Path to <br className="hidden md:block" /> Victory
             </h1>
             <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
@@ -119,7 +119,7 @@ export default function Home() {
               <button
                 onClick={onCreate}
                 disabled={creating}
-                className="flex-1 flex justify-center items-center gap-2 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white font-semibold transition-all shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+                className="flex-shrink-0 flex justify-center items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white font-semibold transition-all shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
               >
                 {creating ? (
                   <span className="animate-pulse">Creating...</span>
