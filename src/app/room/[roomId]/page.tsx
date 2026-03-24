@@ -245,7 +245,8 @@ export default function RoomPage() {
     const t0 = Date.now();
 
     (async () => {
-      const res: any = await joinRoom(String(roomId));
+      const uid = user?.displayName || user?.uid || 'guest';
+      const res: any = await joinRoom(String(roomId), uid);
       setConnectionTimeMs(Date.now() - t0);
 
       if (!mounted) return;

@@ -36,10 +36,10 @@ type JoinRoomOk = {
 
 type JoinRoomErr = { ok: false; reason: string };
 
-export async function joinRoom(roomId: string): Promise<JoinRoomOk | JoinRoomErr> {
+export async function joinRoom(roomId: string, userId: string = 'guest'): Promise<JoinRoomOk | JoinRoomErr> {
   await ensureConnected();
   return new Promise((resolve) => {
-    socket.emit('joinRoom', roomId, (res: JoinRoomOk & { reason?: string }) => {
+    socket.emit('joinRoom', { roomId, userId }, (res: JoinRoomOk & { reason?: string }) => {
       if (res?.ok) {
         resolve({
           ok: true,

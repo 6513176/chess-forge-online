@@ -67,6 +67,8 @@ const rooms = new Map();
 function freshRoomState() {
   return {
     players: new Map(), // Map<socketId, 'w'|'b'>
+    playerNames: new Map(), // Map<socketId, userId>
+    cardsPlayedHistory: [],
     disconnectedColors: new Set(), // สีของผู้Playที่หลุดไป
     deletionTimer: null, // ตัวนับเวลาลบห้อง
     turn: 'w',
@@ -225,10 +227,26 @@ io.on('connection', (socket) => {
   });
 
   // เข้าห้อง
-  socket.on('joinRoom', (roomId, ack) => {
+  socket.on('joinRoom', (payload, ack) => {
+      let roomId = payload;
+      let userId = 'guest';
+      if (typeof payload === 'object' && payload !== null) { roomId = payload.roomId; userId = payload.userId || 'guest'; }
     try {
       if (!roomId) return ack?.({ ok: false, reason: 'no-room-id' });
       const st = ensureState(roomId);
+      if (userId && userId !== 'guest') {
+        let isSelfPlay = false;
+        for (const [sId] of st.players.entries()) {
+          if (st.playerNames.get(sId) === userId && sId !== socket.id) {
+            isSelfPlay = true;
+            break;
+          }
+        }
+        if (isSelfPlay) {
+          return ack?.({ ok: false, reason: 'You are already in this room in another tab/device.' });
+        }
+      }
+      st.playerNames.set(socket.id, userId);
 
       //  สุ่มสี หรือให้ตัวละครที่ว่างอยู่ (เวลามีคนหลุด)
       const used = new Set(st.players.values());
@@ -361,6 +379,8 @@ io.on('connection', (socket) => {
 
       // ถ้าPlayสำเร็จ — ส่งจำนวนการ์ดล่าสุดให้ client ทุกคนในห้อง + log
       if (result && result.ok) {
+        if (!st.cardsPlayedHistory) st.cardsPlayedHistory = [];
+        st.cardsPlayedHistory.push({ socketId: socket.id, cardId: card });
         if (result.endsTurn) {
           st.turn = st.turn === 'w' ? 'b' : 'w';
           st.cardPlayedBy = null;
@@ -661,13 +681,30 @@ io.on('connection', (socket) => {
         surveyAnswers 
       } = data;
       
-      const payload = {
+      const st = rooms.get(roomId);
+      let enemyUserId = 'unknown';
+      if (st) {
+        for (const [sId, name] of st.playerNames.entries()) {
+          if (sId !== socket.id) {
+            enemyUserId = name;
+            break;
+          }
+        }
+      }
+
+            let serverCardsPlayedList = [];
+      if (st && st.cardsPlayedHistory) {
+        serverCardsPlayedList = st.cardsPlayedHistory.filter(c => c.socketId === socket.id).map(c => c.cardId);
+      }
+
+const payload = {
         roomId,
+        enemyUserId,
         userId: userId && userId !== 'guest' ? userId : socket.id,
         socketId: socket.id,
         timeLeftSeconds: timeLeft,
-        cardsPlayedCount: cardsPlayed?.length || 0,
-        cardsPlayedList: cardsPlayed || [],
+        cardsPlayedCount: serverCardsPlayedList.length,
+        cardsPlayedList: serverCardsPlayedList,
         connectionTimeMs,
         hasCompletedSurvey: surveyAnswers !== null,
         ...(surveyAnswers || {}),
