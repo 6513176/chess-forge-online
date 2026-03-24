@@ -2,7 +2,7 @@
 import { Chess } from 'chess.js'
 
 /**
- * รายการการ์ดทั้งหมด (26 ใบ)
+ * รายการการ์ดทั้งหมด (26 cards)
  *  - ถ้าต้องการเพิ่ม/ลด ให้แก้ที่นี่
  */
 const ALL_CARD_IDS = [
@@ -45,7 +45,7 @@ const ALL_CARD_IDS = [
 const mkUid = () =>
   Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-// random deck 26 ใบจาก ALL_CARD_IDS
+// random deck 26 cardsจาก ALL_CARD_IDS
 function createNewDeck() {
   const arr = [...ALL_CARD_IDS]
   for (let i = arr.length - 1; i > 0; i--) {
@@ -55,7 +55,7 @@ function createNewDeck() {
   return arr // CardId[]
 }
 
-// จั่ว n ใบจาก deck (mutate deck)
+// จั่ว n cardsจาก deck (mutate deck)
 function drawCards(deck, n) {
   const drawn = []
   for (let i = 0; i < n; i++) {
@@ -66,24 +66,24 @@ function drawCards(deck, n) {
   return drawn
 }
 
-// state เริ่มต้นของระบบการ์ดในห้องนึง
+// state เริ่มต้นของSystemการ์ดในห้องนึง
 export function freshCardState() {
-  const deck = createNewDeck() // 26 ใบ
+  const deck = createNewDeck() // 26 cards
   const hands = { w: [], b: [] }
 
-  // แจกคนละ 3 → deck เหลือ 20
+  // แจกคนละ 3 → deck Remaining 20
   hands.w = drawCards(deck, 3)
   hands.b = drawCards(deck, 3)
 
   return {
     deck, // CardId[]
     hands, // { w: CardInstance[], b: CardInstance[] }
-    graveyard: [], // ใบที่ใช้แล้ว
+    graveyard: [], // cardsที่ใช้แล้ว
     playedThisTurn: { w: false, b: false },
   }
 }
 
-// จั่ว 1 ใบให้ฝั่งที่ระบุ
+// จั่ว 1 cardsให้ฝั่งที่ระบุ
 export function drawOneForSide(cardState, side) {
   const got = drawCards(cardState.deck, 1)
   if (got.length) {
@@ -106,7 +106,7 @@ export function removeFromHand(cardState, side, uid) {
 }
 
 /**
- * ฟังก์ชันกลางใช้เล่นการ์ดทุกใบใน server
+ * ฟังก์ชันกลางใช้Playการ์ดทุกcardsใน server
  * @param {Object} params
  *  - st: room state
  *  - roomId: string

@@ -27,7 +27,7 @@ type Card = {
   desc: string;
 };
 
-// ใบจริงในมือ (client จะใช้ข้อมูลจาก server + map หา name/desc)
+// cardsจริงในมือ (client จะใช้ข้อมูลจาก server + map หา name/desc)
 type CardInstance = Card & { uid: string };
 
 // นิยามการ์ดทั้งหมด (ฝั่ง client แค่ใช้เพื่อแสดงชื่อ/คำอธิบาย)
@@ -204,7 +204,7 @@ export default function RoomPage() {
     label: string;
   } | null>(null);
 
-  // overlays (โหมดเลือกเป้าหมายของการ์ด)
+  // overlays (โหมดSelect Targetของการ์ด)
   const [selectingShield, setSelectingShield] = useState(false);
   const [shieldCardUid, setShieldCardUid] = useState<string | null>(null);
 
@@ -421,7 +421,7 @@ export default function RoomPage() {
     };
   }, []);
 
-  // ฟัง hand update จาก server (เวลาจั่ว/ใช้การ์ด)
+  // ฟัง hand update จาก server (เวลาจั่ว/used card)
   useEffect(() => {
     const onHand = (cards: { id: CardId; uid: string }[]) => {
       setHand(cards.map(fromServerCard));
@@ -459,7 +459,7 @@ export default function RoomPage() {
   // vote restart
   function voteRestart() {
     socket.emit('game:restart:vote', { roomId }, (ack: any) => {
-      if (!ack?.ok) alert(ack?.reason || 'ไม่สามารถกดพร้อมรีสตาร์ทได้');
+      if (!ack?.ok) alert(ack?.reason || 'Cannot click ready to restart');
     });
   }
 
@@ -593,7 +593,7 @@ export default function RoomPage() {
   function playCard(card: CardInstance) {
     if (!meSide || turn !== meSide) return;
 
-    // ป้องกันเล่นหลายใบในเทิร์นเดียว
+    // ป้องกันPlayหลายcardsในเทิร์นเดียว
     if (cardPlayedBy === meSide) {
       alert('You have already played a card this turn');
       return;
@@ -749,7 +749,7 @@ export default function RoomPage() {
     });
   }
 
-  // BUFF_SWAP_ALLY: เลือกหมากเรา 2 ตัว
+  // BUFF_SWAP_ALLY: Select 2 allied pieces
   function handleSquareClickForSwap(square: Square) {
     if (!selectingSwap || !swapCardUid) return;
 
@@ -894,14 +894,14 @@ function describeBuffsOnSquare(
   const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare } = opts;
 
   if (shield.square === sq) {
-    buffs.push('Shield: กันโดนกิน 1 เทิร์น');
+    buffs.push('Shield: Immune to capture for 1 turn');
   }
 
   if (pawnRange[sq]) {
-    buffs.push('Range Buff: เดิน 2 รอบ (ก้าวที่สองห้ามกิน)');
+    buffs.push('Hit and Run: Move twice (2nd move cannot capture)');
   }
   if (hitAndRunActiveSquare === sq) {
-    buffs.push('กำลังเดินรอบ 2 (ห้ามกิน/ห้ามเดินตัวอื่น)');
+    buffs.push('Moving 2nd time (Cannot capture/move others)');
   }
 
   if (hitAndRunActiveSquare) {
@@ -915,7 +915,7 @@ function describeBuffsOnSquare(
   if (safeZone.square) {
     const area = getArea3x3(safeZone.square);
     if (area[sq]) {
-      buffs.push('Safe Zone: พื้นที่ปลอดภัย 3×3');
+      buffs.push('Safe Zone: 3x3 Safe Area');
     }
   }
 
@@ -923,7 +923,7 @@ function describeBuffsOnSquare(
     const area = getArea3x3(aoe.center);
     if (area[sq]) {
       buffs.push(
-        `AOE Zone: พื้นที่ระเบิด (เหลือ ${aoe.remaining ?? '?'} เทิร์นของผู้ใช้)`
+        `AOE Zone: Blast Area (Remaining ${aoe.remaining ?? '?'} turn for caster)`
       );
     }
   }
@@ -984,7 +984,7 @@ function describeBuffsOnSquare(
   if (authLoading || !user) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">
-        กำลังตรวจสอบระบบล็อกอิน...
+        Checking login status...
       </div>
     );
   }
@@ -1005,7 +1005,7 @@ function describeBuffsOnSquare(
               <span>{user.displayName || 'Player'}</span>
             </div>
             <div>
-              คุณคือ: <b>{color ?? 'กำลังเข้าห้อง…'}</b> | เทิร์น:{' '}
+              You are: <b>{color ?? 'Joining room...'}</b> | Turn:{' '}
               <b>{turn === 'w' ? 'white' : 'black'}</b>
             </div>
             {!isOver && meSide && (
@@ -1014,7 +1014,7 @@ function describeBuffsOnSquare(
                 className="px-3 py-1 text-xs rounded-lg bg-red-600 hover:bg-red-700 font-bold transition font-mono shadow-sm border border-red-500"
                 style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
               >
-                ยอมแพ้ 🏳️
+                Resign 🏳️
               </button>
             )}
           </div>
@@ -1099,7 +1099,7 @@ function describeBuffsOnSquare(
 
                 // ถ้ามี selection อยู่แล้ว
                 if (selectedSquare) {
-                  // คลิกที่ช่องเดิม → ยกเลิก selection
+                  // คลิกที่ช่องเดิม → Cancel selection
                   if (selectedSquare === square) {
                     setSelectedSquare(null);
                     setLegalMovesMap({});
@@ -1122,7 +1122,7 @@ function describeBuffsOnSquare(
                     return;
                   }
 
-                  // คลิกที่อื่นที่ไม่ใช่เป้า → ยกเลิก
+                  // คลิกที่อื่นที่ไม่ใช่เป้า → Cancel
                   setSelectedSquare(null);
                   setLegalMovesMap({});
                   return;

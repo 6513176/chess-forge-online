@@ -67,7 +67,7 @@ const rooms = new Map();
 function freshRoomState() {
   return {
     players: new Map(), // Map<socketId, 'w'|'b'>
-    disconnectedColors: new Set(), // สีของผู้เล่นที่หลุดไป
+    disconnectedColors: new Set(), // สีของผู้Playที่หลุดไป
     deletionTimer: null, // ตัวนับเวลาลบห้อง
     turn: 'w',
     extra: { w: 0, b: 0 },
@@ -85,7 +85,7 @@ function freshRoomState() {
     safeZone: { by: null, square: null }, // center ของโซน 3x3
     aoe: null, // { by, center, remaining }
 
-    // 🎴 ระบบการ์ดต่อห้อง
+    // 🎴 Systemการ์ดต่อห้อง
     cards: freshCardState(),
 
     // เก็บกระดานปัจจุบันไว้ที่เซิร์ฟเวอร์
@@ -234,7 +234,7 @@ io.on('connection', (socket) => {
       const used = new Set(st.players.values());
       let color = null;
 
-      // ยกเลิกการตั้งเวลาลบห้อง (ถ้ามี) เพราะมีคนเข้ามาใหม่
+      // Cancelการตั้งเวลาลบห้อง (ถ้ามี) เพราะมีคนเข้ามาใหม่
       if (st.deletionTimer) {
         clearTimeout(st.deletionTimer);
         st.deletionTimer = null;
@@ -359,7 +359,7 @@ io.on('connection', (socket) => {
         syncHandToSide,
       });
 
-      // ถ้าเล่นสำเร็จ — ส่งจำนวนการ์ดล่าสุดให้ client ทุกคนในห้อง + log
+      // ถ้าPlayสำเร็จ — ส่งจำนวนการ์ดล่าสุดให้ client ทุกคนในห้อง + log
       if (result && result.ok) {
         if (result.endsTurn) {
           st.turn = st.turn === 'w' ? 'b' : 'w';
@@ -457,7 +457,7 @@ io.on('connection', (socket) => {
         }
       }
 
-      // กันกินชิ้นที่ติดโล่
+      // กันกินpcsที่ติดโล่
       if (st.shield.square && capturedSquare && capturedSquare === st.shield.square) {
         socket.emit('game:moveRejected', { reason: 'Shielded' });
         return cb?.({ ok: false, reason: 'shielded' });
@@ -490,7 +490,7 @@ io.on('connection', (socket) => {
         const text = `[CAPTURE] ${sideName} ${atk}@${move.from} x ${vic}@${capturedSquare}`;
         io.to(roomId).emit('chat:message', { text, from: 'system' });
 
-        // ทุก ๆ 2 คิล → จั่วการ์ด 1 ใบจากเด็ค
+        // ทุก ๆ 2 คิล → จั่วการ์ด 1 cardsจากเด็ค
         if (st.captureCount[side] % 2 === 0) {
           drawOneForSide(st.cards, side);
           syncHandToSide(roomId, side);

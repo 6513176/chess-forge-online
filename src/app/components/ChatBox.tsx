@@ -24,7 +24,7 @@ export default function ChatBox({
         <input
           type="text"
           className="flex-1 p-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:outline-none"
-          placeholder="พิมพ์ข้อความ..."
+          placeholder="Type a message..."
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
@@ -33,7 +33,7 @@ export default function ChatBox({
           onClick={sendMessage}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
         >
-          ส่ง
+          Send
         </button>
       </div>
     </div>
