@@ -230,27 +230,50 @@ export function playCardOnServer({
         return { ok: false, reason: 'pawn-cannot-swap-to-edge-rank' }
       }
 
-      // safer put: เอาแค่ข้อมูล {type, color} เวลา put
-      ch.remove(a)
-      ch.remove(b)
-      ch.put({ type: pa.type, color: pa.color }, b)
-      ch.put({ type: pb.type, color: pb.color }, a)
+      // safer put: เอาข้อมูล {type, color} สลับลงใน board() ของ chess.js โดยตรง ป้องกันบั๊กเวลามีพระราชาเกี่ยวข้อง
+      const board = ch.board()
+      const fileA = a.charCodeAt(0) - 97
+      const idxRankA = 8 - parseInt(a[1], 10)
+      const fileB = b.charCodeAt(0) - 97
+      const idxRankB = 8 - parseInt(b[1], 10)
 
-      const fenNew = ch.fen()
+      const temp = board[idxRankA][fileA]
+      board[idxRankA][fileA] = board[idxRankB][fileB]
+      board[idxRankB][fileB] = temp
+
+      let placement = ''
+      for (let r = 0; r < 8; r++) {
+        let empty = 0
+        for (let f = 0; f < 8; f++) {
+          const p = board[r][f]
+          if (p) {
+            if (empty > 0) { placement += empty; empty = 0 }
+            placement += p.color === 'w' ? p.type.toUpperCase() : p.type.toLowerCase()
+          } else {
+            empty++
+          }
+        }
+        if (empty > 0) placement += empty
+        if (r < 7) placement += '/'
+      }
+
+      const parts = ch.fen().split(' ')
+      parts[0] = placement
+      parts[1] = side === 'w' ? 'b' : 'w'
+      parts[3] = '-' // Strip en-passant square
+      const fenNew = parts.join(' ')
       st.fen = fenNew
 
-      st.cardPlayedBy = side
       removeFromHand(st.cards, side, uid)
       syncHandToSide(roomId, side)
 
       io.to(roomId).emit('game:move', {
         move: {},
         fenAfter: fenNew,
-        currentTurn: st.turn,
+        currentTurn: parts[1],
       })
-      io.to(roomId).emit('card:update', { cardPlayedBy: st.cardPlayedBy })
 
-      return { ok: true }
+      return { ok: true, endsTurn: true }
     }
 
     // -------- ป้องกัน / Safe zone 3x3 --------
@@ -286,16 +309,15 @@ export function playCardOnServer({
       return { ok: true }
     }
 
-    // -------- AOE 3×3 ดีเลย์ 2 เทิร์น --------
+    // -------- AOE 3×3 ดีเลย์ 1 เทิร์น (ระเบิดหลังจบตาอีกฝั่ง) --------
     case 'AOE_BLAST': {
       const sq = payload?.square
       if (!sq) return { ok: false, reason: 'need-square' }
 
-      // ตั้งสถานะ AOE ดีเลย์ 2 เทิร์น (จะถูกจัดการใน server.js เมื่อเทิร์นเปลี่ยน)
       st.aoe = {
         by: side,
         center: sq,
-        remaining: 2, // ดีเลย์ 2 เทิร์นของฝั่งที่ลงการ์ด
+        remaining: 2, 
       }
       st.cardPlayedBy = side
 
@@ -307,10 +329,9 @@ export function playCardOnServer({
         cardPlayedBy: st.cardPlayedBy,
       })
 
-      // log ลงแชทว่าฝั่งไหนวาง AOE ที่จุดไหน
       io.to(roomId).emit('chat:message', {
         from: 'system',
-        text: `AOE placed by ${side === 'w' ? 'White' : 'Black'} at ${sq} (detonates in 2 turns)`,
+        text: `AOE placed by ${side === 'w' ? 'White' : 'Black'} at ${sq} (detonates next turn)`,
       })
 
       return { ok: true }
@@ -364,7 +385,9 @@ export function playCardOnServer({
 
       ch.remove(sq)
 
-      const fenAdjusted = ch.fen()
+      const parts = ch.fen().split(' ')
+      parts[3] = '-'
+      const fenAdjusted = parts.join(' ')
 
       // อัปเดตห้อง + สื่อสารไป client
       st.fen = fenAdjusted
@@ -390,4 +413,76 @@ export function playCardOnServer({
     default:
       return { ok: false, reason: 'unknown-card' }
   }
+}
+
+export function resolveAoe(roomId, st, io) {
+  if (!st.aoe || !st.aoe.center) {
+    st.aoe = null;
+    io.to(roomId).emit('card:update', { aoe: null });
+    return;
+  }
+
+  const sq = st.aoe.center;
+  const ch = new Chess(st.fen);
+
+  const file = sq.charCodeAt(0);
+  const rank = parseInt(sq[1], 10);
+  const targets = [];
+
+  for (let df = -1; df <= 1; df++) {
+    for (let dr = -1; dr <= 1; dr++) {
+      const f = file + df;
+      const r = rank + dr;
+      if (f < 97 || f > 104) continue;
+      if (r < 1 || r > 8) continue;
+      
+      const checkSq = String.fromCharCode(f) + r;
+      const p = ch.get(checkSq);
+      if (p && p.type !== 'k') {
+        targets.push({ sq: checkSq, p });
+      }
+    }
+  }
+
+  if (!targets.length) {
+    io.to(roomId).emit('chat:message', {
+      from: 'system',
+      text: `AOE at ${sq} detonated but found no valid targets.`,
+    });
+  } else {
+    const idx = Math.floor(Math.random() * targets.length);
+    const victimSq = targets[idx].sq;
+    const victimPiece = targets[idx].p;
+
+    ch.remove(victimSq);
+    const parts = ch.fen().split(' ');
+    parts[3] = '-';
+    const fenNew = parts.join(' ');
+    st.fen = fenNew;
+
+    io.to(roomId).emit('game:move', {
+      move: {
+        from: null,
+        to: null,
+        san: 'AOE',
+        special: 'AOE_BLAST',
+        target: victimSq,
+        victimType: victimPiece.type,
+        victimColor: victimPiece.color,
+      },
+      fenAfter: fenNew,
+      currentTurn: st.turn,
+    });
+
+    const pt = victimPiece.type === 'p' ? 'Pawn' : victimPiece.type.toUpperCase();
+    const sideName = victimPiece.color === 'w' ? 'White' : 'Black';
+
+    io.to(roomId).emit('chat:message', {
+      from: 'system',
+      text: `AOE BLAST at ${sq} destroyed ${sideName} ${pt} at ${victimSq}`,
+    });
+  }
+
+  st.aoe = null;
+  io.to(roomId).emit('card:update', { aoe: null });
 }

@@ -1,10 +1,13 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { joinRoom, socket } from '@/app/lib/socket';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth } from '@/app/lib/firebase';
+import ExperienceSurvey from '@/app/components/ExperienceSurvey';
 
 // ---- Card types ----
 type CardId =
@@ -32,47 +35,47 @@ const CARD_DEFS: Card[] = [
   {
     id: 'BUFF_EXTRA_MOVE',
     name: 'FORGE',
-    desc: 'ได้เดินเพิ่มอีก 1 ครั้งในเทิร์นนี้ (แต่ห้ามกินราชา)',
+    desc: 'Gain 1 extra move this turn (cannot capture piece)',
   },
   {
     id: 'DEF_SHIELD',
     name: 'SHIELD',
-    desc: 'กันชิ้นที่เลือกไม่ให้โดนกิน 1 เทิร์น',
+    desc: 'Protect chosen piece from being captured for 1 turn',
   },
   {
     id: 'COUNTER_SACRIFICE',
     name: 'SACRIFICE',
-    desc: 'โต้กลับ: ย้อนคืนหมากที่เพิ่งตาย โดยสละหมากเรา 1 ตัว',
+    desc: 'Counter: Revive just-lost piece by sacrificing 1 of your own',
   },
   {
     id: 'BUFF_PAWN_RANGE',
-    name: 'PAWN RANGE+',
-    desc: 'เลือกเบี้ย 1 ตัว ให้เดิน 2 ช่องได้ตลอดเกม',
+    name: 'HIT AND RUN',
+    desc: 'Attach to any piece permanently. It gains 2 moves per turn (1st move captures naturally, 2nd move only repositions).',
   },
   {
     id: 'BUFF_SUMMON_PAWN',
     name: 'SUMMON PAWN',
-    desc: 'เรียกเบี้ยใหม่บนแถวตั้งต้นของเรา (ขาวแถว 2, ดำแถว 7)',
+    desc: 'Summon a new pawn on your starting rank (White 2, Black 7)',
   },
   {
     id: 'BUFF_SWAP_ALLY',
     name: 'SWAP',
-    desc: 'สลับตำแหน่งหมากของคุณ 2 ตัว',
+    desc: 'Swap positions of 2 of your pieces',
   },
   {
     id: 'DEF_SAFE_ZONE',
     name: 'SAFE ZONE',
-    desc: 'สร้างเขตปลอดภัย 3×3 รอบช่องที่เลือก 1 เทิร์น',
+    desc: 'Create a 3x3 safe zone preventing captures for 1 turn',
   },
   {
     id: 'AOE_BLAST',
     name: 'AOE BLAST',
-    desc: 'สุ่มทำลายหมาก 1 ตัวในพื้นที่ 3×3 หลังผ่านไป 2 เทิร์นของคุณ',
+    desc: 'Randomly destroy 1 piece in a 3x3 area after 2 of your turns',
   },
   {
     id: 'CLEANSE_BUFFS',
     name: 'CLEANSE',
-    desc: 'ล้างบัพ',
+    desc: 'Remove effects and buffs from the board',
   },
 ];
 
@@ -112,6 +115,23 @@ function getArea3x3(centerSquare: string | null) {
 
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
+  const router = useRouter();
+
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Auth Guard
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (!u) {
+        router.push('/login?redirect=/room/' + roomId);
+      } else {
+        setUser(u);
+        setAuthLoading(false);
+      }
+    });
+    return () => unsub();
+  }, [router, roomId]);
 
   // --- game states ---
   const gameRef = useRef(new Chess());
@@ -125,6 +145,9 @@ export default function RoomPage() {
   const [result, setResult] = useState<{ type: string; winner?: 'w' | 'b' } | null>(
     null
   );
+  const [hasSubmittedSurvey, setHasSubmittedSurvey] = useState(false);
+  const [connectionTimeMs, setConnectionTimeMs] = useState(0);
+  const [cardsPlayedLog, setCardsPlayedLog] = useState<string[]>([]);
   const [checkSide, setCheckSide] = useState<'w' | 'b' | null>(null);
 
   // restart state
@@ -172,6 +195,13 @@ export default function RoomPage() {
 
   const [hand, setHand] = useState<CardInstance[]>([]);
   const [cardPlayedBy, setCardPlayedBy] = useState<'w' | 'b' | null>(null);
+  const [lockedCardId, setLockedCardId] = useState<string | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<{
+    cardId: string;
+    uid: string;
+    payload: any;
+    label: string;
+  } | null>(null);
 
   // overlays (โหมดเลือกเป้าหมายของการ์ด)
   const [selectingShield, setSelectingShield] = useState(false);
@@ -211,12 +241,15 @@ export default function RoomPage() {
   // join room + socket listeners
   useEffect(() => {
     let mounted = true;
+    const t0 = Date.now();
 
     (async () => {
       const res: any = await joinRoom(String(roomId));
+      setConnectionTimeMs(Date.now() - t0);
+
       if (!mounted) return;
       if (!res.ok) {
-        alert('เข้าห้องไม่ได้: ' + (res.reason ?? 'unknown'));
+        alert('Cannot enter room: ' + (res.reason ?? 'unknown'));
         return;
       }
 
@@ -423,10 +456,11 @@ export default function RoomPage() {
   // chat send
   function sendChat() {
     if (!message.trim()) return;
+    const senderName = user?.displayName || user?.uid.substring(0, 5) || (color ?? 'spectator');
     socket.emit('chat:message', {
       roomId,
       text: message,
-      from: color ?? 'spectator',
+      from: senderName,
     });
     setMessage('');
   }
@@ -435,6 +469,14 @@ export default function RoomPage() {
   function voteRestart() {
     socket.emit('game:restart:vote', { roomId }, (ack: any) => {
       if (!ack?.ok) alert(ack?.reason || 'ไม่สามารถกดพร้อมรีสตาร์ทได้');
+    });
+  }
+
+  // resign
+  function resignGame() {
+    if (!confirm('Are you sure you want to resign?')) return;
+    socket.emit('game:resign', { roomId }, (ack: any) => {
+      if (!ack?.ok) alert(ack?.reason || 'Failed to resign');
     });
   }
 
@@ -483,15 +525,6 @@ export default function RoomPage() {
 
     const fenAfter = game.fen();
 
-    // client-side guard: extra move cannot capture king
-        const myExtra = meSide === 'w' ? extraMove.w : extraMove.b;
-    if (myExtra > 0 && mv.captured) {
-      game.undo();
-      setFen(game.fen());
-      alert('Extra move ใช้เดินอย่างเดียว ห้ามกินหมาก');
-      return false;
-    }
-
 
     setFen(fenAfter);
 
@@ -522,13 +555,56 @@ export default function RoomPage() {
     return true;
   }
 
+  function confirmPendingTarget() {
+    if (!pendingTarget) return;
+    
+    socket.emit(
+      'card:play',
+      {
+        roomId,
+        color,
+        card: pendingTarget.cardId,
+        uid: pendingTarget.uid,
+        payload: pendingTarget.payload,
+      },
+      (ack: any) => {
+        if (!ack?.ok) {
+          alert(ack?.reason || 'Play card failed');
+        } else {
+          setCardsPlayedLog(prev => [...prev, pendingTarget.cardId]);
+        }
+        cancelSelection();
+      }
+    );
+  }
+
+  function cancelSelection() {
+    setPendingTarget(null);
+    setLockedCardId(null);
+    setSelectingShield(false);
+    setShieldCardUid(null);
+    setSelectingCounterSac(false);
+    setCounterCardUid(null);
+    setSelectingPawnRange(false);
+    setPawnRangeCardUid(null);
+    setSelectingSummonPawn(false);
+    setSummonCardUid(null);
+    setSelectingSwap(false);
+    setSwapCardUid(null);
+    setSwapFirstSquare(null);
+    setSelectingSafeZone(false);
+    setSafeZoneCardUid(null);
+    setSelectingAoe(false);
+    setAoeCardUid(null);
+  }
+
   // ---- play cards ----
   function playCard(card: CardInstance) {
     if (!meSide || turn !== meSide) return;
 
     // ป้องกันเล่นหลายใบในเทิร์นเดียว
     if (cardPlayedBy === meSide) {
-      alert('ใช้การ์ดในเทิร์นนี้ไปแล้ว');
+      alert('You have already played a card this turn');
       return;
     }
 
@@ -576,17 +652,27 @@ export default function RoomPage() {
       return;
     }
 
-    // CLEANSE_BUFFS หรือการ์ดไม่ต้องเลือกเป้า
-    socket.emit(
-      'card:play',
-      { roomId, color, card: card.id, uid: card.uid },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'Play card failed');
-        }
-      }
-    );
+    // CLEANSE_BUFFS หรือการ์ดไม่ต้องเลือกเป้า (FORGE)
+    setPendingTarget({
+      cardId: card.id,
+      uid: card.uid,
+      payload: {},
+      label: 'Ready to cast'
+    });
   }
+
+  // ฟังก์ชันเพื่อให้ปุ่ม Cancel เรียกใช้ง่ายๆ
+  const renderCancelBtn = () => (
+    <button onClick={cancelSelection} className="ml-3 px-3 py-1 bg-red-500/80 hover:bg-red-500 text-white rounded text-xs font-bold transition-colors">
+      Cancel
+    </button>
+  );
+
+  const renderConfirmBtn = () => (
+    <button onClick={confirmPendingTarget} className="ml-3 px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-white rounded text-xs font-bold transition-colors">
+      CONFIRM TARGET
+    </button>
+  );
 
   // ---- target handlers ----
 
@@ -596,23 +682,18 @@ export default function RoomPage() {
 
     const p: any = gameRef.current.get(square as any);
     if (!p || p.color !== meSide) {
-      alert('เลือกหมากของตัวเองเท่านั้น');
+      alert('You can only select your own piece');
       setSelectingShield(false);
       setShieldCardUid(null);
       return;
     }
 
-    socket.emit(
-      'card:play',
-      { roomId, color, card: 'DEF_SHIELD', uid: shieldCardUid, payload: { square } },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'Play card failed');
-        }
-        setSelectingShield(false);
-        setShieldCardUid(null);
-      }
-    );
+    setPendingTarget({
+      cardId: 'DEF_SHIELD',
+      uid: shieldCardUid,
+      payload: { square },
+      label: square
+    });
   }
 
   // counter target
@@ -620,54 +701,33 @@ export default function RoomPage() {
     if (!selectingCounterSac || !counterCardUid) return;
     const p: any = gameRef.current.get(square as any);
     if (!p || !p.color || p.color !== meSide || p.type === 'k') {
-      alert('เลือกเฉพาะหมากของคุณ (ยกเว้นราชา) เพื่อสละชีพ');
+      alert('Select your own piece (except King) to sacrifice');
       return;
     }
-    socket.emit(
-      'card:play',
-      {
-        roomId,
-        color,
-        card: 'COUNTER_SACRIFICE',
-        uid: counterCardUid,
-        payload: { sacrificeSquare: square },
-      },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
-        }
-        setSelectingCounterSac(false);
-        setCounterCardUid(null);
-      }
-    );
+
+    setPendingTarget({
+      cardId: 'COUNTER_SACRIFICE',
+      uid: counterCardUid,
+      payload: { sacrificeSquare: square },
+      label: square
+    });
   }
 
-  // BUFF_PAWN_RANGE: เลือก pawn ของเรา
+  // BUFF_PAWN_RANGE (HIT AND RUN): เลือกหมากของเราตัวไหนก็ได้
   function handleSquareClickForPawnRange(square: Square) {
     if (!selectingPawnRange || !pawnRangeCardUid) return;
     const p: any = gameRef.current.get(square as any);
-    if (!p || p.color !== meSide || p.type !== 'p') {
-      alert('เลือกเฉพาะเบี้ยของคุณเท่านั้น');
+    if (!p || p.color !== meSide) {
+      alert('You can only select your own piece');
       return;
     }
 
-    socket.emit(
-      'card:play',
-      {
-        roomId,
-        color,
-        card: 'BUFF_PAWN_RANGE',
-        uid: pawnRangeCardUid,
-        payload: { square },
-      },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
-        }
-        setSelectingPawnRange(false);
-        setPawnRangeCardUid(null);
-      }
-    );
+    setPendingTarget({
+      cardId: 'BUFF_PAWN_RANGE',
+      uid: pawnRangeCardUid,
+      payload: { square },
+      label: square
+    });
   }
 
   // BUFF_SUMMON_PAWN: เลือกช่องว่างบนแถว 2(ขาว) / 7(ดำ)
@@ -676,37 +736,26 @@ export default function RoomPage() {
 
     const p: any = gameRef.current.get(square as any);
     if (p) {
-      alert('ต้องเลือกช่องว่างเท่านั้น');
+      alert('You must select an empty square');
       return;
     }
 
     const rank = parseInt(square[1]);
     if (meSide === 'w' && rank !== 2) {
-      alert('ขาวต้องวางบนแถว 2 เท่านั้น');
+      alert('White must summon on rank 2');
       return;
     }
     if (meSide === 'b' && rank !== 7) {
-      alert('ดำต้องวางบนแถว 7 เท่านั้น');
+      alert('Black must summon on rank 7');
       return;
     }
 
-    socket.emit(
-      'card:play',
-      {
-        roomId,
-        color,
-        card: 'BUFF_SUMMON_PAWN',
-        uid: summonCardUid,
-        payload: { square },
-      },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
-        }
-        setSelectingSummonPawn(false);
-        setSummonCardUid(null);
-      }
-    );
+    setPendingTarget({
+      cardId: 'BUFF_SUMMON_PAWN',
+      uid: summonCardUid,
+      payload: { square },
+      label: square
+    });
   }
 
   // BUFF_SWAP_ALLY: เลือกหมากเรา 2 ตัว
@@ -715,7 +764,7 @@ export default function RoomPage() {
 
     const p: any = gameRef.current.get(square as any);
     if (!p || p.color !== meSide) {
-      alert('เลือกเฉพาะหมากของคุณเท่านั้น');
+      alert('You can only select your own piece');
       return;
     }
 
@@ -726,81 +775,62 @@ export default function RoomPage() {
     }
 
     if (swapFirstSquare === square) {
-      alert('ต้องเลือกอีกช่องที่ต่างกัน');
+      alert('You must select a different square');
       return;
     }
 
-    // เลือกตัวที่สอง ครบแล้ว ยิงไป server
-    socket.emit(
-      'card:play',
-      {
-        roomId,
-        color,
-        card: 'BUFF_SWAP_ALLY',
-        uid: swapCardUid,
-        payload: { a: swapFirstSquare, b: square },
-      },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
-        }
-        setSelectingSwap(false);
-        setSwapCardUid(null);
-        setSwapFirstSquare(null);
-      }
-    );
+    setPendingTarget({
+      cardId: 'BUFF_SWAP_ALLY',
+      uid: swapCardUid,
+      payload: { a: swapFirstSquare, b: square },
+      label: `${swapFirstSquare} & ${square}`
+    });
   }
 
   // DEF_SAFE_ZONE 3×3: เลือก center ช่องเดียว
   function handleSquareClickForSafeZone(square: Square) {
     if (!selectingSafeZone || !safeZoneCardUid) return;
 
-    socket.emit(
-      'card:play',
-      {
-        roomId,
-        color,
-        card: 'DEF_SAFE_ZONE',
-        uid: safeZoneCardUid,
-        payload: { square },
-      },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
-        }
-        setSelectingSafeZone(false);
-        setSafeZoneCardUid(null);
-      }
-    );
+    setPendingTarget({
+      cardId: 'DEF_SAFE_ZONE',
+      uid: safeZoneCardUid,
+      payload: { square },
+      label: square
+    });
   }
 
   // AOE_BLAST 3×3: เลือก center ช่องเดียว
   function handleSquareClickForAoe(square: Square) {
     if (!selectingAoe || !aoeCardUid) return;
 
-    socket.emit(
-      'card:play',
-      {
-        roomId,
-        color,
-        card: 'AOE_BLAST',
-        uid: aoeCardUid,
-        payload: { square },
-      },
-      (ack: any) => {
-        if (!ack?.ok) {
-          alert(ack?.reason || 'ใช้การ์ดไม่ได้');
-        }
-        setSelectingAoe(false);
-        setAoeCardUid(null);
-      }
-    );
+    setPendingTarget({
+      cardId: 'AOE_BLAST',
+      uid: aoeCardUid,
+      payload: { square },
+      label: square
+    });
   }
 
   const inviteUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   // custom square styles (shield + safeZone 3x3 + AOE center + first swap)
   const customSquareStyles: Record<string, any> = {};
+
+  if (pendingTarget) {
+    const p = pendingTarget.payload;
+    const highlightTarget = (sq: string) => {
+      if (!sq) return;
+      customSquareStyles[sq] = {
+        ...(customSquareStyles[sq] || {}),
+        boxShadow: 'inset 0 0 15px 4px rgba(236,72,153,0.8)', // pink glow
+        backgroundColor: 'rgba(236,72,153,0.4)',
+      };
+    };
+    if (p.square) highlightTarget(p.square);
+    if (p.sacrificeSquare) highlightTarget(p.sacrificeSquare);
+    if (p.a) highlightTarget(p.a);
+    if (p.b) highlightTarget(p.b);
+  }
 
     // --- selected square + legal moves highlighting ---
   if (selectedSquare) {
@@ -811,11 +841,19 @@ export default function RoomPage() {
   }
 
   Object.keys(legalMovesMap).forEach((sq) => {
-  customSquareStyles[sq] = {
-    ...(customSquareStyles[sq] || {}),
-    backgroundColor: 'rgba(34,197,94,0.45)',  
-  };
-});
+    customSquareStyles[sq] = {
+      ...(customSquareStyles[sq] || {}),
+      backgroundColor: 'rgba(34,197,94,0.45)',  
+    };
+  });
+
+  if (shield.square) {
+    customSquareStyles[shield.square] = {
+      ...(customSquareStyles[shield.square] || {}),
+      boxShadow: 'inset 0 0 15px 4px rgba(6,182,212,0.8)',
+      backgroundColor: 'rgba(6,182,212,0.3)',
+    };
+  }
 
 
 
@@ -830,6 +868,18 @@ export default function RoomPage() {
       };
     });
   }
+  
+  if (hoverSquare && (selectingAoe || selectingSafeZone)) {
+    const area = getArea3x3(hoverSquare);
+    Object.keys(area).forEach((sq) => {
+      customSquareStyles[sq] = {
+        ...(customSquareStyles[sq] || {}),
+        backgroundColor: selectingAoe ? 'rgba(239,68,68,0.4)' : 'rgba(234,179,8,0.4)',
+        boxShadow: selectingAoe ? 'inset 0 0 0 3px rgba(239,68,68,0.7)' : 'inset 0 0 0 3px rgba(234,179,8,0.7)'
+      };
+    });
+  }
+
 function describeBuffsOnSquare(
   sq: string | null,
   opts: {
@@ -871,9 +921,20 @@ function describeBuffsOnSquare(
 }
   // คืน object map ของช่องที่เดินไปได้ เช่น { e4: true, d5: true }
   function computeLegalMovesFrom(square: Square | null) {
-  if (!square) return {};
-  try {
-    // บอก TS ว่า square เป็น Square
+    if (!square) return {};
+    try {
+      // Force side to move if we are in Extra Move phase
+      if (meSide) {
+        let fenNow = gameRef.current.fen();
+        const parts = fenNow.split(' ');
+        if (parts[1] !== meSide) {
+          parts[1] = meSide;
+          const adjustedFen = parts.join(' ');
+          gameRef.current = new Chess(adjustedFen);
+        }
+      }
+
+      // บอก TS ว่า square เป็น Square
     const moves = gameRef.current.moves({ square: square as Square, verbose: true }) as any[] | string[];
     const out: Record<string, boolean> = {};
     if (!moves) return out;
@@ -909,6 +970,14 @@ function describeBuffsOnSquare(
     };
   }
 
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white">
+        กำลังตรวจสอบระบบล็อกอิน...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-4 md:p-8 grid gap-4 md:grid-cols-[1fr_320px]">
       {/* LEFT */}
@@ -917,9 +986,26 @@ function describeBuffsOnSquare(
           <div>
             Room: <span className="font-mono">{String(roomId)}</span>
           </div>
-          <div>
-            คุณคือ: <b>{color ?? 'กำลังเข้าห้อง…'}</b> | เทิร์น:{' '}
-            <b>{turn === 'w' ? 'white' : 'black'}</b>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-full text-sm">
+              {user.photoURL && (
+                <img src={user.photoURL} alt="Profile" className="w-5 h-5 rounded-full" />
+              )}
+              <span>{user.displayName || 'Player'}</span>
+            </div>
+            <div>
+              คุณคือ: <b>{color ?? 'กำลังเข้าห้อง…'}</b> | เทิร์น:{' '}
+              <b>{turn === 'w' ? 'white' : 'black'}</b>
+            </div>
+            {!isOver && meSide && (
+              <button
+                onClick={resignGame}
+                className="px-3 py-1 text-xs rounded-lg bg-red-600 hover:bg-red-700 font-bold transition font-mono shadow-sm border border-red-500"
+                style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
+              >
+                ยอมแพ้ 🏳️
+              </button>
+            )}
           </div>
         </div>
 
@@ -1048,7 +1134,7 @@ function describeBuffsOnSquare(
                   pawnRange,
                   aoe,
                 });
-                if (!buffs.length) return 'ไม่มีบัพ';
+                if (!buffs.length) return 'No buffs';
                 return buffs.join(' | ');
               })()}
             </div>
@@ -1057,26 +1143,106 @@ function describeBuffsOnSquare(
         </div>
 
         {/* CARDS */}
-        <div className="flex-shrink-0"><div>
-            Deck: {deckCount ?? '-'} | Graveyard: {graveyardCount ?? '-'}
+        <div className="flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-lg drop-shadow-sm">Hand</h3>
+            <div className="text-sm px-3 py-1 rounded-full bg-black/30 border border-white/10">
+              Deck: {deckCount ?? '-'} | Graveyard: {graveyardCount ?? '-'}
+            </div>
           </div>
-          <h3 className="font-semibold mb-2">การ์ดของฉัน</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            {hand.map((c) => (
-              <div key={c.uid} className="bg-gray-800 p-3 rounded-xl">
-                <div className="font-semibold">{c.name}</div>
-                <div className="text-sm opacity-80">{c.desc}</div>
-                <button
-                  onClick={() => playCard(c)}
-                  disabled={
-                    isOver || !meSide || turn !== meSide || cardPlayedBy === meSide
-                  }
-                  className="mt-2 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50"
+          <div className="flex gap-4 overflow-x-auto px-4 py-6 -mx-4 snap-x hide-scrollbar">
+            {hand.map((c) => {
+              const playable = !isOver && !!meSide && turn === meSide && cardPlayedBy !== meSide;
+              const isLocked = lockedCardId === c.uid;
+              
+              return (
+                <div 
+                  key={c.uid} 
+                  onClick={() => { 
+                    if (playable && lockedCardId !== c.uid) {
+                      setLockedCardId(c.uid);
+                      playCard(c);
+                    }
+                  }}
+                  className={`relative shrink-0 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 snap-center
+                    ${isLocked 
+                      ? 'w-56 h-80 z-50 -translate-y-6 shadow-[0_30px_60px_-15px_rgba(99,102,241,0.6)] border-2 border-indigo-400 scale-105 mx-2' 
+                      : `w-44 h-64 ${playable ? 'cursor-pointer hover:-translate-y-4 hover:shadow-[0_20px_40px_-15px_rgba(99,102,241,0.5)] border border-indigo-500/40 hover:border-indigo-400' : 'cursor-not-allowed opacity-60 grayscale-[50%] border border-gray-700'}`
+                    }
+                    group bg-gray-900 flex flex-col justify-between
+                  `}
                 >
-                  ใช้การ์ด
-                </button>
-              </div>
-            ))}
+                  {/* Image Background */}
+                  <img 
+                    src={`/cards/${c.id}.png`} 
+                    alt={c.name}
+                    className="absolute inset-0 w-full h-full object-cover z-0 transition-transform duration-500 group-hover:scale-110"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  
+                  {/* Content Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-black/20 to-black/90 z-10 pointer-events-none" />
+
+                  <div className="relative z-20 p-4 flex flex-col h-full justify-between pointer-events-none">
+                    <div>
+                      <div className="font-extrabold text-xl text-white tracking-wide uppercase drop-shadow-md" style={{textShadow: "0 2px 4px rgba(0,0,0,0.8)"}}>{c.name}</div>
+                      
+                      {/* Description only visible when locked */}
+                      <div className={`text-xs text-slate-200 mt-2 font-medium leading-relaxed drop-shadow-md bg-black/50 p-2.5 rounded-lg backdrop-blur-md border border-white/10 transition-opacity duration-300 ${isLocked ? 'opacity-100' : 'opacity-0 hidden'}`} style={{textShadow: "0 1px 2px rgba(0,0,0,0.8)"}}>
+                        {c.desc}
+                      </div>
+                    </div>
+
+                    <div className="mt-auto pointer-events-auto">
+                      {isLocked ? (
+                        <div className="flex flex-col gap-2">
+                          {pendingTarget ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmPendingTarget();
+                              }}
+                              className="w-full font-bold px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:scale-[1.02] transition-all animate-in fade-in zoom-in duration-200"
+                            >
+                              {Object.keys(pendingTarget.payload).length === 0 ? 'CONFIRM USE' : 'CONFIRM TARGET'}
+                            </button>
+                          ) : (
+                            <div className="w-full text-center font-bold px-3 py-2 rounded-xl border-2 border-dashed border-indigo-500/50 bg-indigo-500/10 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.2)]">
+                              SELECT TARGET
+                            </div>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cancelSelection();
+                            }}
+                            className="w-full font-bold px-3 py-1.5 rounded-xl bg-white/10 hover:bg-red-500/20 hover:text-red-300 text-gray-300 transition-all text-xs"
+                          >
+                            CANCEL
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (playable) {
+                              setLockedCardId(c.uid);
+                              playCard(c);
+                            }
+                          }}
+                          disabled={!playable}
+                          className={`w-full font-bold px-3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-emerald-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all
+                            ${playable ? 'translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 hover:scale-[1.02]' : 'hidden'}
+                          `}
+                        >
+                          SELECT CARD
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -1093,81 +1259,15 @@ function describeBuffsOnSquare(
               onClick={() => navigator.clipboard.writeText(inviteUrl)}
               className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600"
             >
-              คัดลอกลิงก์
+              Copy Link
             </button>
           </div>
         </div>
-
-        {(selectingShield ||
-          selectingCounterSac ||
-          selectingPawnRange ||
-          selectingSummonPawn ||
-          selectingSwap ||
-          selectingSafeZone ||
-          selectingAoe) && (
-          <div className="text-center text-sm -mt-2">
-            {selectingShield && (
-              <span className="text-cyan-300">
-                SHIELD: คลิกหมากของตัวเองเพื่อคุ้มกัน
-              </span>
-            )}
-            {selectingCounterSac && !selectingShield && (
-              <span className="text-amber-300">
-                SACRIFICE: คลิกหมากของคุณ (ยกเว้นราชา) 1 ตัวเพื่อสละชีพ
-              </span>
-            )}
-            {selectingPawnRange &&
-              !selectingShield &&
-              !selectingCounterSac && (
-                <span className="text-emerald-300">
-                  PAWN RANGE+: คลิกเบี้ยของคุณ 1 ตัว
-                </span>
-              )}
-            {selectingSummonPawn &&
-              !selectingShield &&
-              !selectingCounterSac &&
-              !selectingPawnRange && (
-                <span className="text-lime-300">
-                  SUMMON PAWN: คลิกช่องว่างบนแถวตั้งต้นของฝั่งคุณ
-                </span>
-              )}
-            {selectingSwap &&
-              !selectingShield &&
-              !selectingCounterSac &&
-              !selectingPawnRange &&
-              !selectingSummonPawn && (
-                <span className="text-indigo-300">
-                  SWAP: คลิกหมากของคุณ 2 ตัวที่จะสลับตำแหน่ง
-                </span>
-              )}
-            {selectingSafeZone &&
-              !selectingShield &&
-              !selectingCounterSac &&
-              !selectingPawnRange &&
-              !selectingSummonPawn &&
-              !selectingSwap && (
-                <span className="text-yellow-300">
-                  SAFE ZONE: คลิกช่องใดก็ได้เพื่อเป็นศูนย์กลางโซนปลอดภัย 3×3
-                </span>
-              )}
-            {selectingAoe &&
-              !selectingShield &&
-              !selectingCounterSac &&
-              !selectingPawnRange &&
-              !selectingSummonPawn &&
-              !selectingSwap &&
-              !selectingSafeZone && (
-                <span className="text-pink-300">
-                  AOE BLAST: คลิกช่องใดก็ได้เพื่อเป็นศูนย์กลาง 3×3 สำหรับระเบิด
-                </span>
-              )}
-          </div>
-        )}
       </div>
 
       {/* RIGHT: chat */}
       <div className="bg-gray-900 rounded-2xl p-4 text-white flex flex-col h-[560px]">
-        <div className="font-semibold">แชท</div>
+        <div className="font-semibold">Chat</div>
         <div className="flex-1 overflow-y-auto mt-2 space-y-1">
           {chat.map((line, i) => (
             <div key={i} className="text-sm bg-gray-800 px-2 py-1 rounded">
@@ -1183,13 +1283,13 @@ function describeBuffsOnSquare(
             onKeyDown={(e) => {
               if (e.key === 'Enter') sendChat();
             }}
-            placeholder="พิมพ์ข้อความ…"
+            placeholder="Type a message..."
           />
           <button
             onClick={sendChat}
             className="px-3 py-1.5 rounded bg-indigo-500 hover:bg-indigo-600"
           >
-            ส่ง
+            Send
           </button>
         </div>
       </div>
@@ -1201,27 +1301,31 @@ function describeBuffsOnSquare(
             <div className="text-center mb-3">
               <div className="text-lg font-bold">
                 {(() => {
-                  if (!result) return 'จบเกม';
+                  if (!result) return 'Game Over';
                   if (result.type === 'checkmate') {
                     const iWin = meSide && result.winner === meSide;
-                    return iWin ? 'คุณชนะ! (Checkmate)' : 'คุณแพ้ (Checkmate)';
+                    return iWin ? 'You Win! (Checkmate)' : 'You Lose (Checkmate)';
                   }
-                  if (result.type === 'stalemate') return 'เสมอ (Stalemate)';
-                  if (result.type === 'insufficient') return 'เสมอ (ตัวไม่พอให้เมต)';
-                  if (result.type === 'timeout') return 'หมดเวลา';
-                  return 'จบเกม';
+                  if (result.type === 'stalemate') return 'Draw (Stalemate)';
+                  if (result.type === 'insufficient') return 'Draw (Insufficient Material)';
+                  if (result.type === 'timeout') return 'Time Out';
+                  if (result.type === 'resign') {
+                    const iWin = meSide && result.winner === meSide;
+                    return iWin ? 'You Win! (Opponent Resigned 🏳️)' : 'You Resigned 😔';
+                  }
+                  return 'Game Over';
                 })()}
               </div>
               {result?.winner && (
                 <div className="text-sm opacity-80">
-                  ผู้ชนะ: {result.winner === 'w' ? 'White' : 'Black'}
+                  Winner: {result.winner === 'w' ? 'White' : 'Black'}
                 </div>
               )}
             </div>
 
             <div className="flex items-center justify-between gap-3">
               <div className="flex-1">
-                <div className="text-sm mb-1">ความพร้อม:</div>
+                <div className="text-sm mb-1">Readiness:</div>
                 <div className="flex items-center gap-2">
                   <span
                     className={`px-2 py-1 rounded text-xs ${
@@ -1243,7 +1347,7 @@ function describeBuffsOnSquare(
               <div className="flex items-center gap-2">
                 {restartCounting ? (
                   <div className="px-3 py-1.5 rounded bg-amber-600 text-white">
-                    รีเซ็ตใน {remain}s
+                    Restart in {remain}s
                   </div>
                 ) : (
                   <button
@@ -1252,8 +1356,8 @@ function describeBuffsOnSquare(
                     disabled={!meSide || restartVotes.has(meSide)}
                   >
                     {!meSide || !restartVotes.has(meSide)
-                      ? 'พร้อมเริ่มใหม่'
-                      : 'รออีกฝั่ง…'}
+                      ? 'Ready to Restart'
+                      : 'Waiting for opponent...'}
                   </button>
                 )}
               </div>
@@ -1265,6 +1369,37 @@ function describeBuffsOnSquare(
           </div>
         </div>
       )}
+
+      <ExperienceSurvey 
+        roomId={roomId as string}
+        isOpen={isOver && !hasSubmittedSurvey}
+        onSubmit={(answers) => {
+          const timeL = meSide === 'w' ? timeLeft.w : timeLeft.b;
+          const uid = user?.displayName || user?.uid || 'guest';
+          socket.emit('game:summary_report', {
+            roomId,
+            userId: uid,
+            timeLeft: timeL,
+            cardsPlayed: cardsPlayedLog,
+            connectionTimeMs,
+            surveyAnswers: answers
+          });
+          setHasSubmittedSurvey(true);
+        }}
+        onClose={() => {
+          const timeL = meSide === 'w' ? timeLeft.w : timeLeft.b;
+          const uid = user?.displayName || user?.uid || 'guest';
+          socket.emit('game:summary_report', {
+            roomId,
+            userId: uid,
+            timeLeft: timeL,
+            cardsPlayed: cardsPlayedLog,
+            connectionTimeMs,
+            surveyAnswers: null
+          });
+          setHasSubmittedSurvey(true);
+        }}
+      />
     </div>
   );
 }

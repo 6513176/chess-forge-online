@@ -3,42 +3,37 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createRoom } from './lib/socket';
-
-type User = { id: string; email: string; name: string } | null;
+import { auth, signOut } from './lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 export default function Home() {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [joinId, setJoinId] = useState('');
-  const [user, setUser] = useState<User>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    // ตรวจ session เบื้องต้น (mock / ถ้าต่อ backend: /api/me)
-    (async () => {
-      try {
-        const r = await fetch('http://localhost:3001/api/me', {
-          credentials: 'include',
-        });
-        const j = await r.json();
-        if (j?.ok && j.user) setUser(j.user);
-      } catch (e) {
-        // ignore
-      } finally {
-        setLoadingUser(false);
-      }
-    })();
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoadingUser(false);
+    });
+    return () => unsub();
   }, []);
 
   async function onCreate() {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     setCreating(true);
     setErr(null);
     try {
       const { roomId } = await createRoom();
       router.push(`/room/${roomId}`);
     } catch (e: any) {
-      setErr('สร้างห้องไม่สำเร็จ ลองใหม่อีกครั้ง');
+      setErr('Failed to create room. Please try again.');
     } finally {
       setCreating(false);
     }
@@ -46,123 +41,130 @@ export default function Home() {
 
   function onJoin() {
     const id = joinId.trim();
-    if (!id) return setErr('กรุณากรอก Room ID');
+    if (!id) return setErr('Please enter a Room ID');
+    if (!user) {
+      router.push(`/room/${id}`); // Let the room guard handle the redirect and ?redirect back to play
+      return;
+    }
     router.push(`/room/${id}`);
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#061021] via-[#071427] to-[#02060b] text-white p-6 flex items-center justify-center">
-      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* LEFT: Hero */}
-        <div className="bg-[linear-gradient(135deg,#0b1221cc,_#071022d9)] border border-gray-800 rounded-2xl p-8 shadow-xl flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg">
-                {/* Knight svg */}
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M6 13c0-2.5 2-4 4-4s4-1.5 4-4 3-4 3-4l-2 6-2 5-5 6H6v-9z" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+    <div 
+      className="relative min-h-screen bg-[#030712] text-slate-200 overflow-hidden font-sans selection:bg-indigo-500/30 bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: "url('/bg.png')" }}
+    >
+      {/* Background Overlay */}
+      <div className="absolute inset-0 bg-black/70 pointer-events-none z-0" />
+
+      {/* Background Orbs & Effects */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/20 blur-[120px] rounded-full mix-blend-screen pointer-events-none z-0" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-600/20 blur-[120px] rounded-full mix-blend-screen pointer-events-none z-0" />
+
+      {/* Navigation Bar */}
+      <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-black/20 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Chess Forge Logo" className="w-10 h-10 object-contain drop-shadow-md" />
+            <span className="font-bold text-xl tracking-tight text-white drop-shadow-sm">ChessForge</span>
+          </div>
+
+          <div className="flex items-center gap-4 text-sm">
+            {loadingUser ? (
+              <div className="w-24 h-5 animate-pulse bg-white/10 rounded-md" />
+            ) : user ? (
+              <div className="flex items-center gap-4">
+                <span className="text-slate-400 font-medium hidden sm:inline-block">
+                  {user.isAnonymous ? 'Guest Player' : user.displayName || user.email?.split('@')[0]}
+                </span>
+                <button
+                  onClick={() => signOut(auth)}
+                  className="px-4 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-slate-300"
+                >
+                  Logout
+                </button>
               </div>
-              <div>
-                <h1 className="text-2xl font-extrabold tracking-tight">ChessForge</h1>
-                <p className="text-sm text-gray-300">เกมหมากรุกผสมการ์ด — เล่นกับเพื่อนแบบเรียลไทม์</p>
-              </div>
+            ) : (
+              <button
+                onClick={() => router.push('/login')}
+                className="px-5 py-2 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium transition-colors shadow-lg shadow-indigo-500/25"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Hero Content */}
+      <main className="relative pt-32 pb-16 px-6 flex flex-col items-center justify-center min-h-screen z-10">
+        
+        <div className="max-w-3xl w-full text-center space-y-8">
+          
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-semibold tracking-wide uppercase shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              Live Multiplayer
             </div>
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500">
+              Forge Your Path to <br className="hidden md:block" /> Victory
+            </h1>
+            <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+              Experience chess reimagined with powerful custom cards. Join the arena, cast spells, and outmaneuver your opponent in real-time.
+            </p>
+          </div>
 
-            <h2 className="mt-8 text-3xl font-bold leading-tight">สร้างห้อง</h2>
-            <p className="mt-3 text-gray-300">เริ่มเกมได้ทันที — สมัครบัญชีเพื่อบันทึกชื่อผู้เล่นและประวัติการเล่น</p>
-
-            <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div className="pt-8">
+            <div className="mx-auto max-w-lg p-1.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md shadow-2xl flex flex-col sm:flex-row gap-2">
               <button
                 onClick={onCreate}
                 disabled={creating}
-                className="px-5 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 transition font-semibold shadow"
+                className="flex-1 flex justify-center items-center gap-2 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white font-semibold transition-all shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
               >
-                {creating ? 'Creating…' : 'Create Room'}
+                {creating ? (
+                  <span className="animate-pulse">Creating...</span>
+                ) : (
+                  <>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    Create Room
+                  </>
+                )}
               </button>
 
-              <div className="flex gap-2 items-center">
+              <div className="flex-1 flex bg-black/40 rounded-xl focus-within:ring-2 ring-indigo-500/50 transition-all overflow-hidden border border-white/5">
                 <input
                   value={joinId}
                   onChange={(e) => setJoinId(e.target.value)}
-                  placeholder="Room ID (ตัวอย่าง: ab12cd)"
-                  className="px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-sm"
+                  onKeyDown={(e) => e.key === 'Enter' && onJoin()}
+                  placeholder="Room Code..."
+                  className="w-full bg-transparent px-4 py-4 text-white outline-none placeholder:text-slate-500 font-mono"
                 />
-                <button onClick={onJoin} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 transition text-sm">
+                <button 
+                  onClick={onJoin}
+                  className="px-5 bg-white/5 hover:bg-white/10 border-l border-white/5 transition-colors font-medium text-slate-300 hover:text-white"
+                >
                   Join
                 </button>
               </div>
             </div>
 
-            {err && <div className="mt-4 text-sm text-rose-400">{err}</div>}
+            {err && (
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                {err}
+              </div>
+            )}
+            
+            {!user && !loadingUser && (
+               <div className="mt-6 text-sm text-slate-500">
+                 You must <button onClick={() => router.push('/login')} className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4">sign in or play as guest</button> to create a room.
+               </div>
+            )}
           </div>
 
-          <div className="mt-8 text-sm text-gray-400">
-            Pro tip: แชร์ลิงก์ห้องให้เพื่อน แล้วเริ่มแข่งได้เลย 
-          </div>
         </div>
 
-        {/* RIGHT: Panel (Auth / Quick links / Info) */}
-        <aside className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 shadow-xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-300">บัญชี</div>
-              <div className="font-medium">
-                {loadingUser ? 'ตรวจสอบ...' : user ? user.name || user.email : 'ผู้เล่นไม่ระบุ'}
-              </div>
-            </div>
-
-            <div>
-              {!loadingUser && user ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      // logout (ถ้ามี API)
-                      fetch('http://localhost:3001/api/logout', { method: 'POST', credentials: 'include' })
-                        .finally(() => {
-                          setUser(null);
-                          router.refresh();
-                        });
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-sm"
-                  >
-                    Logout
-                  </button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <a href="/login" className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-sm">Login</a>
-                  <a href="/register" className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-sm">Register</a>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <hr className="my-4 border-gray-800" />
-
-          <div className="space-y-3">
-            <div>
-              <h4 className="text-sm text-gray-300">ChessForge</h4>
-              <ul className="mt-2 text-sm text-gray-400 space-y-1">
-                <li>• Demo version</li>
-                <li>• v0.01</li>
-                
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-sm text-gray-300"></h4>
-              <div className="mt-2 flex flex-col gap-2">
-                  
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 text-xs text-gray-500">
-            
-          </div>
-        </aside>
-      </div>
+      </main>
     </div>
   );
 }

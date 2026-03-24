@@ -11,8 +11,8 @@ export default function RegisterMockCard() {
 
   function submitMock() {
     setErr(null);
-    if (!email || !pwd) { setErr('กรุณากรอกข้อมูล'); return; }
-    if (pwd.length < 6) { setErr('รหัสผ่านต้องอย่างน้อย 6 ตัว'); return; }
+    if (!email || !pwd) { setErr('Please fill in all fields'); return; }
+    if (pwd.length < 6) { setErr('Password must be at least 6 characters'); return; }
     router.push('/login');
   }
 

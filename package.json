@@ -12,7 +12,10 @@
   "dependencies": {
     "chess.js": "^1.3.1",
     "express": "^5.1.0",
+    "firebase": "^12.11.0",
+    "mongodb": "^7.1.1",
     "next": "15.3.3",
+    "posthog-node": "^5.21.2",
     "react": "^19.0.0",
     "react-chessboard": "^4.7.3",
     "react-dom": "^19.0.0",

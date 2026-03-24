@@ -3,11 +3,23 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { Chess } from 'chess.js';
-import { freshCardState, drawOneForSide, playCardOnServer } from './cards.server.js';
+import { freshCardState, drawOneForSide, playCardOnServer, resolveAoe } from './cards.server.js';
+import { MongoClient } from 'mongodb';
+
+const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+const client = new MongoClient(mongoUri);
+let db;
+
+client.connect()
+  .then(() => {
+    db = client.db('chess_forge');
+    console.log('Connected to MongoDB');
+  })
+  .catch((err) => console.error('Failed to connect to MongoDB:', err));
 
 const cardName = (id) => {
   switch (id) {
-    case 'BUFF_EXTRA_MOVE': return 'Forge (เดินเพิ่ม 1 ครั้ง)';
+    case 'BUFF_EXTRA_MOVE': return 'Forge (Extra Move)';
     case 'DEF_SHIELD': return 'Shield';
     case 'COUNTER_SACRIFICE': return 'Sacrifice';
     case 'BUFF_PAWN_RANGE': return 'Range Buff';
@@ -55,8 +67,11 @@ const rooms = new Map();
 function freshRoomState() {
   return {
     players: new Map(), // Map<socketId, 'w'|'b'>
+    disconnectedColors: new Set(), // สีของผู้เล่นที่หลุดไป
+    deletionTimer: null, // ตัวนับเวลาลบห้อง
     turn: 'w',
     extra: { w: 0, b: 0 },
+    isExtraMovePhase: { w: false, b: false },
     shield: { by: null, square: null },
     counter: { by: null, armed: false },
     pendingCounter: null,
@@ -78,9 +93,10 @@ function freshRoomState() {
     // ⏱ สถานะนาฬิกา (server authoritative)
     clock: {
       baseSec: INITIAL_CLOCK_SEC,
-      w: INITIAL_CLOCK_SEC,
-      b: INITIAL_CLOCK_SEC,
+      w: INITIAL_CLOCK_SEC * 1000,
+      b: INITIAL_CLOCK_SEC * 1000,
       running: null, // 'w' | 'b' | null (null = ยังไม่เริ่ม/หยุด)
+      lastTickAt: null,
     },
 
     // สถานะเกม / ข้อจำกัด
@@ -148,485 +164,597 @@ function evaluateGameState(fen) {
   return { over: false, payload: { type: 'safe' } };
 }
 
-// ระเบิด AOE: เลือกสุ่ม 1 ตัวในโซน 3×3 (ไม่ระเบิดคิง)
-// แทน resolveAoe เดิมด้วยโค้ดนี้ใน server.js
-function resolveAoe(roomId, st) {
-  if (!st.aoe || !st.aoe.center) {
-    st.aoe = null;
-    io.to(roomId).emit('card:update', { aoe: null });
-    return;
-  }
-
-  // สร้าง board จาก FEN ปัจจุบัน (สำคัญมาก)
-  const ch = new Chess(st.fen);
-
-  // หา 3x3 รอบ center
-  const area = getArea3x3(st.aoe.center);
-  const targets = [];
-
-  for (const sq of area) {
-    const p = ch.get(sq);
-    // เลือกเฉพาะชิ้นที่มีอยู่และไม่ใช่ราชา
-    if (p && p.type !== 'k') {
-      targets.push({ sq, p });
-    }
-  }
-
-  if (!targets.length) {
-    // ไม่มีตัวให้ระเบิด -> ยกเลิก AOE
-    st.aoe = null;
-    io.to(roomId).emit('card:update', { aoe: null });
-    io.to(roomId).emit('chat:message', {
-      from: 'system',
-      text: `AOE at ${st.aoe?.center} detonated but found no valid targets.`,
-    });
-    return;
-  }
-
-  // สุ่มเป้าจริง
-  const idx = Math.floor(Math.random() * targets.length);
-  const victimSq = targets[idx].sq;
-  const victimPiece = targets[idx].p;
-
-  // ลบอย่างปลอดภัยด้วย remove()
-  ch.remove(victimSq);
-
-  // อัปเดต FEN ในห้อง
-  const fenNew = ch.fen();
-  st.fen = fenNew;
-  st.aoe = null;
-
-  // แจ้ง client ว่ามีการเปลี่ยนกระดาน (AOE effect)
-  io.to(roomId).emit('game:move', {
-    move: {
-      from: null,
-      to: null,
-      san: 'AOE',
-      special: 'AOE_BLAST',
-      target: victimSq,
-      victimType: victimPiece.type,
-      victimColor: victimPiece.color,
-    },
-    fenAfter: fenNew,
-    currentTurn: st.turn,
-  });
-
-  // เคลียร์สถานะ aoe และ broadcast update
-  io.to(roomId).emit('card:update', { aoe: null });
-
-  // log ลงแชทด้วยเพื่อให้เห็นเหตุการณ์
-  io.to(roomId).emit('chat:message', {
-    from: 'system',
-    text: `AOE BLAST ที่ ${st.aoe?.center} ทำลาย ${victimPiece.color === 'w' ? 'White' : 'Black'} ${victimPiece.type.toUpperCase()} ที่ ${victimSq}`,
-  });
-}
 
 
 
-// ---------- clock loop (นับเวลาใน server ทุกห้อง) ----------
+// ---------- clock loop (นับเวลาใน server ทุกห้อง เซิร์ฟเวอร์ทำแค่ดักจับ timeout) ----------
 setInterval(() => {
+  const now = Date.now();
   for (const [roomId, st] of rooms.entries()) {
     if (st.gameOver) continue;
     const clk = st.clock;
-    if (!clk || !clk.running) continue; // ยังไม่เริ่ม หรือพักอยู่
+    if (!clk || !clk.running || !clk.lastTickAt) continue;
 
-    const side = clk.running; // 'w' หรือ 'b'
-    if (clk[side] <= 0) continue; // เผื่อมีหลุดยังไง
+    const elapsed = now - clk.lastTickAt;
+    const remaining = clk[clk.running] - elapsed;
 
-    // หักเวลา 1 วินาที
-    clk[side] = Math.max(0, clk[side] - 1);
-
-    if (clk[side] <= 0) {
+    if (remaining <= 0) {
       // ⏱ หมดเวลา -> แพ้
+      clk[clk.running] = 0;
       st.gameOver = true;
-      const winner = opp(side);
+      const winner = opp(clk.running);
       st.result = { type: 'timeout', winner };
       clk.running = null;
 
       io.to(roomId).emit('clock:update', {
-        w: clk.w,
-        b: clk.b,
-        running: clk.running,
+        w: Math.ceil(clk.w / 1000),
+        b: Math.ceil(clk.b / 1000),
+        running: null,
       });
       io.to(roomId).emit('game:over', st.result);
     } else {
-      // ยังไม่หมด ยิงอัปเดตเวลาให้ client
+      // ส่งอัปเดตเวลาให้ Client เดินทุกวินาทีแบบ Realtime นำหน้า (Client ยังไม่ได้ทำอนิเมชั่นเอง)
+      const sendW = clk.running === 'w' ? remaining : clk.w;
+      const sendB = clk.running === 'b' ? remaining : clk.b;
+
       io.to(roomId).emit('clock:update', {
-        w: clk.w,
-        b: clk.b,
+        w: Math.ceil(sendW / 1000),
+        b: Math.ceil(sendB / 1000),
         running: clk.running,
       });
     }
   }
-}, 1000); // 1 วิ/ติ๊ก
+}, 1000); // เช็คทุก 1 วินาที และส่งให้ Client อัปเดต UI
 
 // ---------- socket ----------
 io.on('connection', (socket) => {
   // สร้างห้อง
   socket.on('createRoom', (ack) => {
-    const roomId = Math.random().toString(36).slice(2, 8);
-    rooms.set(roomId, freshRoomState());
-    ack?.({ ok: true, roomId });
+    try {
+      let roomId;
+      do {
+        roomId = Math.random().toString(36).slice(2, 8);
+      } while (rooms.has(roomId));
+      rooms.set(roomId, freshRoomState());
+      ack?.({ ok: true, roomId });
+    } catch (err) {
+      console.error('[createRoom] error:', err);
+      ack?.({ ok: false, reason: 'server-error' });
+    }
   });
 
   // เข้าห้อง
   socket.on('joinRoom', (roomId, ack) => {
-    if (!roomId) return ack?.({ ok: false, reason: 'no-room-id' });
-    const st = ensureState(roomId);
+    try {
+      if (!roomId) return ack?.({ ok: false, reason: 'no-room-id' });
+      const st = ensureState(roomId);
 
-    //  สุ่มสี
-    const used = new Set(st.players.values());
-    let color = null;
-    if (!used.has('w') && !used.has('b')) {
-      color = Math.random() < 0.5 ? 'w' : 'b';
-    } else if (!used.has('w')) {
-      color = 'w';
-    } else if (!used.has('b')) {
-      color = 'b';
-    } else {
-      return ack?.({ ok: false, reason: 'room-full' });
-    }
+      //  สุ่มสี หรือให้ตัวละครที่ว่างอยู่ (เวลามีคนหลุด)
+      const used = new Set(st.players.values());
+      let color = null;
 
-    socket.join(roomId);
-    st.players.set(socket.id, color);
-    const side = color; // 'w' | 'b'
+      // ยกเลิกการตั้งเวลาลบห้อง (ถ้ามี) เพราะมีคนเข้ามาใหม่
+      if (st.deletionTimer) {
+        clearTimeout(st.deletionTimer);
+        st.deletionTimer = null;
+      }
 
-    // ส่งสถานะทั้งหมดกลับไปเพื่อซิงก์ client
-    ack?.({
-      ok: true,
-      color: color === 'w' ? 'white' : 'black',
-      currentTurn: st.turn,
-      fen: st.fen,
-      extra: st.extra,
-      shield: st.shield,
-      safeZone: st.safeZone,
-      pawnRange: st.pawnRange,
-      aoe: st.aoe,
-      cardPlayedBy: st.cardPlayedBy,
-      clock: st.clock
-        ? {
-            w: st.clock.w,
-            b: st.clock.b,
+      if (!used.has('w') && !used.has('b')) {
+        // ห้องว่างไม่มีคนเลย (อาจจะหลุดทั้งคู่ หรือ เพิ่งสร้างห้อง)
+        if (st.disconnectedColors.size > 0) {
+          // มีคนหลุด ให้สีแรกที่หลุดไป
+          color = Array.from(st.disconnectedColors)[0];
+        } else {
+          color = Math.random() < 0.5 ? 'w' : 'b';
+        }
+      } else if (!used.has('w')) {
+        color = 'w';
+      } else if (!used.has('b')) {
+        color = 'b';
+      } else {
+        return ack?.({ ok: false, reason: 'room-full' });
+      }
+
+      st.disconnectedColors.delete(color);
+
+      socket.join(roomId);
+      st.players.set(socket.id, color);
+      const side = color; // 'w' | 'b'
+
+      // ส่งสถานะทั้งหมดกลับไปเพื่อซิงก์ client
+      ack?.({
+        ok: true,
+        color: color === 'w' ? 'white' : 'black',
+        currentTurn: st.turn,
+        fen: st.fen,
+        extra: st.extra,
+        shield: st.shield,
+        safeZone: st.safeZone,
+        pawnRange: st.pawnRange,
+        aoe: st.aoe,
+        cardPlayedBy: st.cardPlayedBy,
+        clock: st.clock
+          ? {
+            w: Math.ceil(st.clock.w / 1000),
+            b: Math.ceil(st.clock.b / 1000),
             running: st.clock.running,
+            lastTickAt: st.clock.lastTickAt,
           }
-        : null,
-      hand: st.cards.hands[side] || [],
-      deckCount: st.cards.deck.length,
-      graveyardCount: st.cards.graveyard.length,
-    });
+          : null,
+        hand: st.cards.hands[side] || [],
+        deckCount: st.cards.deck.length,
+        graveyardCount: st.cards.graveyard.length,
+      });
 
-    // 🎴 ส่งไพ่ในมือให้ player นี้อีกรอบผ่าน event
-    io.to(socket.id).emit('card:hand', st.cards.hands[side] || []);
+      // 🎴 ส่งไพ่ในมือให้ player นี้อีกรอบผ่าน event
+      io.to(socket.id).emit('card:hand', st.cards.hands[side] || []);
 
-    socket.once('disconnect', () => {
-      const s = rooms.get(roomId);
-      if (!s) return;
-      s.players.delete(socket.id);
-      socket.to(roomId).emit('opponent-left');
-      if (s.players.size === 0) rooms.delete(roomId);
-    });
-    io.to(socket.id).emit('card:hand', st.cards.hands[side] || [])
+      socket.once('disconnect', () => {
+        try {
+          const s = rooms.get(roomId);
+          if (!s) return;
+
+          const disconnectedColor = s.players.get(socket.id);
+          if (disconnectedColor) {
+            s.disconnectedColors.add(disconnectedColor);
+          }
+
+          s.players.delete(socket.id);
+          socket.to(roomId).emit('opponent-left');
+
+          if (s.players.size === 0) {
+            // ถ้าไม่มีคนอยู่ในห้องแล้ว ให้หน่วงเวลา 5 นาที (300,000 ms) ก่อนลบห้อง
+            s.deletionTimer = setTimeout(() => {
+              rooms.delete(roomId);
+              console.log(`[Room] ${roomId} deleted after 5 minutes of inactivity.`);
+            }, 5 * 60 * 1000);
+          }
+        } catch (err) {
+          console.error('[disconnect] error:', err);
+        }
+      });
+      io.to(socket.id).emit('card:hand', st.cards.hands[side] || [])
 
 
-io.to(socket.id).emit('card:counts', {
-  deck: st.cards.deck.length,
-  graveyard: st.cards.graveyard.length,
-});
+      io.to(socket.id).emit('card:counts', {
+        deck: st.cards.deck.length,
+        graveyard: st.cards.graveyard.length,
+      });
+    } catch (err) {
+      console.error('[joinRoom] error:', err);
+      ack?.({ ok: false, reason: 'server-error' });
+    }
   });
 
   // แชท
   socket.on('chat:message', ({ roomId, text, from }) => {
-    io.to(roomId).emit('chat:message', { text, from });
+    try {
+      io.to(roomId).emit('chat:message', { text, from });
+    } catch (err) {
+      console.error('[chat:message] error:', err);
+    }
   });
 
   // ---------- cards ----------
   socket.on('card:play', ({ roomId, color, card, uid, payload }, cb) => {
-    const st = rooms.get(roomId);
-    if (!st) return cb?.({ ok: false, reason: 'no-room' });
-    if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
+    try {
+      const st = rooms.get(roomId);
+      if (!st) return cb?.({ ok: false, reason: 'no-room' });
+      if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
 
-    const side = color === 'white' ? 'w' : 'b';
-    if (st.turn !== side) return cb?.({ ok: false, reason: 'not-your-turn' });
-    if (st.cardPlayedBy === side) return cb?.({ ok: false, reason: 'card-already-used-this-turn' });
+      const side = color === 'white' ? 'w' : 'b';
+      if (st.turn !== side) return cb?.({ ok: false, reason: 'not-your-turn' });
+      if (st.cardPlayedBy === side) return cb?.({ ok: false, reason: 'card-already-used-this-turn' });
 
-    const result = playCardOnServer({
-      st,
-      roomId,
-      side,
-      card,
-      uid,
-      payload,
-      io,
-      syncHandToSide,
-    });
-
-    // ถ้าเล่นสำเร็จ — ส่งจำนวนการ์ดล่าสุดให้ client ทุกคนในห้อง + log
-    if (result && result.ok) {
-      io.to(roomId).emit('card:counts', {
-        deck: st.cards.deck.length,
-        graveyard: st.cards.graveyard.length,
+      const result = playCardOnServer({
+        st,
+        roomId,
+        side,
+        card,
+        uid,
+        payload,
+        io,
+        syncHandToSide,
       });
 
-      const sideName = side === 'w' ? 'White' : 'Black';
-      io.to(roomId).emit('chat:message', {
-        from: 'system',
-        text: `[CARD] ${sideName} ใช้การ์ด ${cardName(card)}`,
-      });
-    }
+      // ถ้าเล่นสำเร็จ — ส่งจำนวนการ์ดล่าสุดให้ client ทุกคนในห้อง + log
+      if (result && result.ok) {
+        if (result.endsTurn) {
+          st.turn = st.turn === 'w' ? 'b' : 'w';
+          st.cardPlayedBy = null;
+          st.noKingBy = null;
 
-    cb?.(result);
-  });
+          if (st.shield.by && st.turn === st.shield.by) st.shield = { by: null, square: null };
+          if (st.safeZone.by && st.turn === st.safeZone.by) st.safeZone = { by: null, square: null };
 
-  // ---------- moves ----------
-  socket.on('game:move', ({ roomId, move, fenBefore, fenAfter, by, capturedSquare }, cb) => {
-    const st = rooms.get(roomId);
-    if (!st) return cb?.({ ok: false, reason: 'no-room' });
-    if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
+          if (st.safeZone.by && st.turn === st.safeZone.by) st.safeZone = { by: null, square: null };
 
-    const side = st.players.get(socket.id);
-    if (!side) return cb?.({ ok: false, reason: 'not-in-room' });
+          if (st.clock && !st.gameOver) {
+            const now = Date.now();
+            if (st.clock.running && st.clock.lastTickAt) {
+              st.clock[st.clock.running] = Math.max(0, st.clock[st.clock.running] - (now - st.clock.lastTickAt));
+            }
+            st.clock.running = st.turn;
+            st.clock.lastTickAt = now;
+            io.to(roomId).emit('clock:update', {
+              w: Math.ceil(st.clock.w / 1000),
+              b: Math.ceil(st.clock.b / 1000),
+              running: st.clock.running,
+            });
+          }
 
-    // ตรวจสิทธิ์ตาเดิน
-    if (side !== st.turn || side !== by) {
-      return cb?.({ ok: false, reason: 'not-your-turn' });
-    }
+          io.to(roomId).emit('card:update', {
+            cardPlayedBy: st.cardPlayedBy,
+            noKingBy: st.noKingBy,
+            shield: st.shield,
+            safeZone: st.safeZone
+          });
+        }
 
-    // ✅ เช็คว่าตานี้เป็น extra move จากการ์ด BUFF_EXTRA_MOVE หรือเปล่า
-    const hasGlobalExtra = st.extra?.[side] > 0;
-    const fromRangeBuff = st.pawnRange && st.pawnRange[move?.from] ? true : false; // ไว้ใช้ข้อ 2 ต่อ
-
-    // เริ่มจับเวลาครั้งแรก
-    if (st.clock && !st.clock.running) {
-      st.clock.running = st.turn;
-    }
-
-    // ถ้าเป็น extra move (hasGlobalExtra) → ห้ามกิน "อะไรทั้งนั้น"
-    if (hasGlobalExtra && move.capturedPieceType) {
-      socket.emit('game:moveRejected', {
-        reason: 'Extra move สามารถเดินได้อย่างเดียว ห้ามกินหมาก',
-      });
-      return cb?.({ ok: false, reason: 'extra-move-no-capture' });
-    }
-
-    // ถ้าเป็นตัวที่มีบัพ pawnRange → ห้ามกินเหมือนกัน
-    if (fromRangeBuff && move.capturedPieceType) {
-      socket.emit('game:moveRejected', {
-        reason: 'ตัวที่มีบัพเดิน 2 รอบ ห้ามกินหมาก',
-      });
-      return cb?.({ ok: false, reason: 'range-buff-no-capture' });
-    }
-
-    // กันกินช่องที่เป็น safe zone (3x3 รอบ center)
-    if (st.safeZone?.square && capturedSquare) {
-      const area = getArea3x3(st.safeZone.square);
-      if (area.includes(capturedSquare)) {
-        socket.emit('game:moveRejected', { reason: 'Safe zone' });
-        return cb?.({ ok: false, reason: 'safe-zone' });
-      }
-    }
-
-    // กันกินชิ้นที่ติดโล่
-    if (st.shield.square && capturedSquare && capturedSquare === st.shield.square) {
-      socket.emit('game:moveRejected', { reason: 'Shielded' });
-      return cb?.({ ok: false, reason: 'shielded' });
-    }
-
-    // ย้ายโล่ตาม
-    if (st.shield.by === side && st.shield.square === move.from) {
-      st.shield.square = move.to;
-      io.to(roomId).emit('card:update', { shield: st.shield });
-    }
-
-    // บันทึกการ “ตายล่าสุด” + นับการกิน + แจกการ์ดทุก 2 คิล
-    if (capturedSquare) {
-      st.lastCapture = {
-        victim: opp(side),
-        capturedSquare,
-        fenAfter,
-        attackerFrom: move.from,
-        attackerTo: move.to,
-        attackerPieceType: move.attackerPieceType || null,
-        capturedPieceType: move.capturedPieceType || null,
-      };
-
-      st.captureCount[side] = (st.captureCount?.[side] ?? 0) + 1;
-
-      // ✅ log ลงแชท
-      const sideName = side === 'w' ? 'White' : 'Black';
-      const atk = move.attackerPieceType || '?';
-      const vic = move.capturedPieceType || '?';
-      const text = `[CAPTURE] ${sideName} ${atk}@${move.from} x ${vic}@${capturedSquare}`;
-      io.to(roomId).emit('chat:message', { text, from: 'system' });
-
-      // ทุก ๆ 2 คิล → จั่วการ์ด 1 ใบจากเด็ค
-      if (st.captureCount[side] % 2 === 0) {
-        drawOneForSide(st.cards, side);
-        syncHandToSide(roomId, side);
-
-        // ส่งจำนวนการ์ดให้ client
         io.to(roomId).emit('card:counts', {
           deck: st.cards.deck.length,
           graveyard: st.cards.graveyard.length,
         });
-      }
-    }
 
-    // --- จัดการเทิร์น / เสริมพลัง / อายุบัพ ---
-    const hadExtra = st.extra[side] > 0;
-    const usedRangeBuff = !!(st.pawnRange && st.pawnRange[move.from]);
-
-    if (hadExtra || usedRangeBuff) {
-      // ✅ ตานี้ยังเป็นฝั่งเดิม (ได้เดินต่ออีก 1 ครั้ง)
-      if (hadExtra) {
-        st.extra[side] -= 1;
-        io.to(roomId).emit('card:update', {
-          extra: st.extra,
-          noKingBy: st.noKingBy,
+        const sideName = side === 'w' ? 'White' : 'Black';
+        io.to(roomId).emit('chat:message', {
+          from: 'system',
+          text: `[CARD] ${sideName} plays ${cardName(card)}`,
         });
       }
-      // ถ้าใช้จาก range buff ไม่ต้องลดอะไร บัพติดตัวไปตลอด
-    } else {
-      // เปลี่ยนเทิร์นตามปกติ
-      st.turn = opp(st.turn);
-      st.cardPlayedBy = null;
-      st.noKingBy = null;
-      io.to(roomId).emit('card:update', {
-        cardPlayedBy: st.cardPlayedBy,
-        noKingBy: st.noKingBy,
-      });
 
-      // โล่หมดอายุเมื่อเทิร์นวนกลับมาหาผู้ลงโล่
-      if (st.shield.by && st.turn === st.shield.by) {
-        st.shield = { by: null, square: null };
+      cb?.(result);
+    } catch (err) {
+      console.error('[card:play] error:', err);
+      cb?.({ ok: false, reason: 'server-error' });
+    }
+  });
+
+  // ---------- moves ----------
+  socket.on('game:move', ({ roomId, move, fenBefore, fenAfter, by, capturedSquare }, cb) => {
+    try {
+      const st = rooms.get(roomId);
+      if (!st) return cb?.({ ok: false, reason: 'no-room' });
+      if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
+
+      const side = st.players.get(socket.id);
+      if (!side) return cb?.({ ok: false, reason: 'not-in-room' });
+
+      // ตรวจสิทธิ์ตาเดิน
+      if (side !== st.turn || side !== by) {
+        return cb?.({ ok: false, reason: 'not-your-turn' });
+      }
+
+      // ✅ เช็คว่าตานี้เป็น extra move จากการ์ด BUFF_EXTRA_MOVE หรือเปล่า
+      const isExtraPhase = st.isExtraMovePhase?.[side] === true;
+      const fromRangeBuff = st.pawnRange && st.pawnRange[move?.from] ? true : false; // ไว้ใช้ข้อ 2 ต่อ
+
+      // เริ่มจับเวลาครั้งแรก
+      if (st.clock && !st.clock.running) {
+        st.clock.running = st.turn;
+        st.clock.lastTickAt = Date.now();
+      }
+
+      // ถ้าเป็น extra move → ห้ามกิน "อะไรทั้งนั้น"
+      if (isExtraPhase && move.capturedPieceType) {
+        socket.emit('game:moveRejected', {
+          reason: 'Extra move allows movement only, no capturing',
+        });
+        return cb?.({ ok: false, reason: 'extra-move-no-capture' });
+      }
+
+
+
+      // กันกินช่องที่เป็น safe zone (3x3 รอบ center)
+      if (st.safeZone?.square && capturedSquare) {
+        const area = getArea3x3(st.safeZone.square);
+        if (area.includes(capturedSquare)) {
+          socket.emit('game:moveRejected', { reason: 'Safe zone' });
+          return cb?.({ ok: false, reason: 'safe-zone' });
+        }
+      }
+
+      // กันกินชิ้นที่ติดโล่
+      if (st.shield.square && capturedSquare && capturedSquare === st.shield.square) {
+        socket.emit('game:moveRejected', { reason: 'Shielded' });
+        return cb?.({ ok: false, reason: 'shielded' });
+      }
+
+      // ย้ายโล่ตาม
+      if (st.shield.by === side && st.shield.square === move.from) {
+        st.shield.square = move.to;
         io.to(roomId).emit('card:update', { shield: st.shield });
       }
 
-      // safe zone หมดอายุเมื่อเทิร์นวนกลับมาหาผู้ลง safe zone
-      if (st.safeZone.by && st.turn === st.safeZone.by) {
-        st.safeZone = { by: null, square: null };
-        io.to(roomId).emit('card:update', { safeZone: st.safeZone });
+      // บันทึกการ “ตายล่าสุด” + นับการกิน + แจกการ์ดทุก 2 คิล
+      if (capturedSquare) {
+        st.lastCapture = {
+          victim: opp(side),
+          capturedSquare,
+          fenAfter,
+          attackerFrom: move.from,
+          attackerTo: move.to,
+          attackerPieceType: move.attackerPieceType || null,
+          capturedPieceType: move.capturedPieceType || null,
+        };
+
+        st.captureCount[side] = (st.captureCount?.[side] ?? 0) + 1;
+
+        // ✅ log ลงแชท
+        const sideName = side === 'w' ? 'White' : 'Black';
+        const atk = move.attackerPieceType || '?';
+        const vic = move.capturedPieceType || '?';
+        const text = `[CAPTURE] ${sideName} ${atk}@${move.from} x ${vic}@${capturedSquare}`;
+        io.to(roomId).emit('chat:message', { text, from: 'system' });
+
+        // ทุก ๆ 2 คิล → จั่วการ์ด 1 ใบจากเด็ค
+        if (st.captureCount[side] % 2 === 0) {
+          drawOneForSide(st.cards, side);
+          syncHandToSide(roomId, side);
+
+          // ส่งจำนวนการ์ดให้ client
+          io.to(roomId).emit('card:counts', {
+            deck: st.cards.deck.length,
+            graveyard: st.cards.graveyard.length,
+          });
+        }
       }
-    }
 
-    // ===== ตรวจ AOE ดีเลย์ สำหรับฝั่งที่วาง AOE: ลดทุกครั้งที่เขาเดิน =====
-    if (st.aoe && st.aoe.by && side === st.aoe.by) {
-      st.aoe.remaining -= 1;
+      // --- จัดการเทิร์น / เสริมพลัง / อายุบัพ ---
+      const hadExtra = st.extra[side] > 0;
+      const pieceHasRangeBuff = !!(st.pawnRange && st.pawnRange[move.from]);
+      
+      // ให้สิทธิ์เดินเบี้ยอีกครั้งเฉพาะเกมที่ยังไม่ได้ใช้โควต้า Range Buff ในเทิร์นนี้
+      const usedRangeBuff = pieceHasRangeBuff && !st.rangeBuffUsedThisTurn;
 
-      if (st.aoe.remaining <= 0) {
-        resolveAoe(roomId, st);
+      if (hadExtra || usedRangeBuff) {
+        // ✅ ตานี้ยังเป็นฝั่งเดิม (ได้เดินต่ออีก 1 ครั้ง)
+        if (hadExtra) {
+          st.extra[side] -= 1;
+          st.isExtraMovePhase[side] = true;
+          io.to(roomId).emit('card:update', {
+            extra: st.extra,
+            noKingBy: st.noKingBy,
+          });
+        } else if (usedRangeBuff) {
+          st.rangeBuffUsedThisTurn = true; // บันทึกว่าเบี้ยตัวนี้ใช้สิทธิ์เดินก้าวเสริมในรอบนี้ไปแล้ว
+        }
       } else {
-        io.to(roomId).emit('card:update', { aoe: st.aoe });
+        // เปลี่ยนเทิร์นตามปกติ
+        st.turn = opp(st.turn);
+        st.cardPlayedBy = null;
+        st.noKingBy = null;
+        st.rangeBuffUsedThisTurn = false; // คืนสิทธิ์เดิน 2 ก้าวบัพเบี้ย ให้รีเซ็ตเมื่อจบรอบ
+        st.isExtraMovePhase[side] = false;
+        io.to(roomId).emit('card:update', {
+          cardPlayedBy: st.cardPlayedBy,
+          noKingBy: st.noKingBy,
+        });
+
+        // โล่หมดอายุเมื่อเทิร์นวนกลับมาหาผู้ลงโล่
+        if (st.shield.by && st.turn === st.shield.by) {
+          st.shield = { by: null, square: null };
+          io.to(roomId).emit('card:update', { shield: st.shield });
+        }
+
+        // safe zone หมดอายุเมื่อเทิร์นวนกลับมาหาผู้ลง safe zone
+        if (st.safeZone.by && st.turn === st.safeZone.by) {
+          st.safeZone = { by: null, square: null };
+          io.to(roomId).emit('card:update', { safeZone: st.safeZone });
+        }
+
+        // (อดีตเคยมีเช็ค AOE ดีเลย์ตรงนี้ ตอนนี้ย้ายไประเบิดทันทีเลยลบทิ้งไปแล้ว)
       }
+
+      // sync อัปเดตเวลาแบบ Precision Clock
+      if (st.clock && !st.gameOver) {
+        const now = Date.now();
+        // หักลบเวลาที่เพิ่งใช้ไปของคนที่เดิน (แม้จะเป็น Extra move ก็ถูกหักเวลา)
+        if (st.clock.running && st.clock.lastTickAt) {
+          st.clock[st.clock.running] = Math.max(0, st.clock[st.clock.running] - (now - st.clock.lastTickAt));
+        }
+
+        // อัปเดตเทิร์นล่าสุด
+        st.clock.running = st.turn;
+        st.clock.lastTickAt = Date.now();
+
+        io.to(roomId).emit('clock:update', {
+          w: Math.ceil(st.clock.w / 1000),
+          b: Math.ceil(st.clock.b / 1000),
+          running: st.clock.running,
+          lastTickAt: st.clock.lastTickAt // Client จะใช้ ref นี้ไป animate หลอกๆ
+        });
+      }
+
+      // ถ้าเหยื่อเป็นคนเดินแล้ว → หมดสิทธิ์โต้กลับในตานั้น
+      if (st.lastCapture && side === st.lastCapture.victim) st.lastCapture = null;
+
+      //  เก็บ FEN ล่าสุดไว้ที่ห้อง
+      st.fen = fenAfter;
+
+      // ถ้าช่องต้นทางมีบัพ pawnRange → ย้ายบัพไปช่องปลาย
+      if (st.pawnRange && st.pawnRange[move.from]) {
+        st.pawnRange[move.to] = st.pawnRange[move.from];
+        delete st.pawnRange[move.from];
+        io.to(roomId).emit('card:update', { pawnRange: st.pawnRange });
+      }
+
+      // ถ้าช่องที่ถูกกินมีบัพ → ลบออก (ตัวนั้นตายแล้ว)
+      if (capturedSquare && st.pawnRange && st.pawnRange[capturedSquare]) {
+        delete st.pawnRange[capturedSquare];
+        io.to(roomId).emit('card:update', { pawnRange: st.pawnRange });
+      }
+
+      //  broadcast กระดาน (ตาปัจจุบันที่คำนวณแล้ว)
+      io.to(roomId).emit('game:move', { move, fenAfter, currentTurn: st.turn });
+
+      // ===== ตรวจ AOE 1-turn delay =====
+      if (st.aoe) {
+        st.aoe.remaining -= 1;
+        if (st.aoe.remaining <= 0) {
+          resolveAoe(roomId, st, io);
+        } else {
+          io.to(roomId).emit('card:update', { aoe: st.aoe });
+        }
+      }
+
+      const evalRes = evaluateGameState(fenAfter);
+      if (evalRes.over) {
+        st.gameOver = true;
+        st.result = evalRes.payload;
+        if (st.clock) st.clock.running = null; // หยุดนาฬิกาเมื่อเกมจบ
+
+        io.to(roomId).emit('game:over', st.result);
+      } else if (evalRes.payload.type === 'check') {
+        io.to(roomId).emit('game:check', {
+          sideInCheck: evalRes.payload.sideInCheck,
+        });
+      }
+
+      cb?.({ ok: true });
+    } catch (err) {
+      console.error('[game:move] error:', err);
+      cb?.({ ok: false, reason: 'server-error' });
     }
+  });
 
-    // sync ให้ clock วิ่งตามเทิร์นปัจจุบัน
-    if (st.clock && !st.gameOver) {
-      st.clock.running = st.turn;
-    }
+  // ---------- RESIGN ----------
+  socket.on('game:resign', ({ roomId }, cb) => {
+    try {
+      const st = rooms.get(roomId);
+      if (!st) return cb?.({ ok: false, reason: 'no-room' });
+      if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
 
-    // ถ้าเหยื่อเป็นคนเดินแล้ว → หมดสิทธิ์โต้กลับในตานั้น
-    if (st.lastCapture && side === st.lastCapture.victim) st.lastCapture = null;
+      const side = st.players.get(socket.id);
+      if (!side) return cb?.({ ok: false, reason: 'not-in-room' });
 
-    //  เก็บ FEN ล่าสุดไว้ที่ห้อง
-    st.fen = fenAfter;
-
-    // ถ้าช่องต้นทางมีบัพ pawnRange → ย้ายบัพไปช่องปลาย
-    if (st.pawnRange && st.pawnRange[move.from]) {
-      st.pawnRange[move.to] = st.pawnRange[move.from];
-      delete st.pawnRange[move.from];
-      io.to(roomId).emit('card:update', { pawnRange: st.pawnRange });
-    }
-
-    // ถ้าช่องที่ถูกกินมีบัพ → ลบออก (ตัวนั้นตายแล้ว)
-    if (capturedSquare && st.pawnRange && st.pawnRange[capturedSquare]) {
-      delete st.pawnRange[capturedSquare];
-      io.to(roomId).emit('card:update', { pawnRange: st.pawnRange });
-    }
-
-    //  broadcast กระดาน (ตาปัจจุบันที่คำนวณแล้ว)
-    io.to(roomId).emit('game:move', { move, fenAfter, currentTurn: st.turn });
-
-    const evalRes = evaluateGameState(fenAfter);
-    if (evalRes.over) {
       st.gameOver = true;
-      st.result = evalRes.payload;
-      if (st.clock) st.clock.running = null; // หยุดนาฬิกาเมื่อเกมจบ
-      io.to(roomId).emit('game:over', st.result);
-    } else if (evalRes.payload.type === 'check') {
-      io.to(roomId).emit('game:check', {
-        sideInCheck: evalRes.payload.sideInCheck,
-      });
-    }
+      const winner = opp(side);
+      st.result = { type: 'resign', winner };
+      if (st.clock) st.clock.running = null;
 
-    cb?.({ ok: true });
+      io.to(roomId).emit('game:over', st.result);
+
+      const sideName = side === 'w' ? 'White' : 'Black';
+      io.to(roomId).emit('chat:message', { from: 'system', text: `[RESIGN] ${sideName} resigned` });
+
+      cb?.({ ok: true });
+    } catch (err) {
+      console.error('[game:resign] error:', err);
+      cb?.({ ok: false, reason: 'server-error' });
+    }
+  });
+
+  // ---------- SUMMARY REPORT (Consolidated Analytics) ----------
+  socket.on('game:summary_report', (data) => {
+    try {
+      const { 
+        roomId, 
+        userId, 
+        timeLeft, 
+        cardsPlayed, 
+        connectionTimeMs, 
+        surveyAnswers 
+      } = data;
+      
+      const payload = {
+        roomId,
+        userId: userId && userId !== 'guest' ? userId : socket.id,
+        socketId: socket.id,
+        timeLeftSeconds: timeLeft,
+        cardsPlayedCount: cardsPlayed?.length || 0,
+        cardsPlayedList: cardsPlayed || [],
+        connectionTimeMs,
+        hasCompletedSurvey: surveyAnswers !== null,
+        ...(surveyAnswers || {}),
+        createdAt: new Date()
+      };
+
+      if (db) {
+        db.collection('match_summaries').insertOne(payload)
+          .then(() => console.log(`[MongoDB] Match summary saved for ${payload.userId} in room ${roomId}`))
+          .catch((err) => console.error('[MongoDB] Insert error:', err));
+      } else {
+        console.warn('[MongoDB] Database not connected. Summary dropped.');
+      }
+    } catch (err) {
+      console.error('[game:summary_report] error:', err);
+    }
   });
 
   // ---------- READY TO RESTART ----------
   socket.on('game:restart:vote', ({ roomId }, cb) => {
-    const st = rooms.get(roomId);
-    if (!st) return cb?.({ ok: false, reason: 'no-room' });
-    if (!st.gameOver) return cb?.({ ok: false, reason: 'not-over' });
+    try {
+      const st = rooms.get(roomId);
+      if (!st) return cb?.({ ok: false, reason: 'no-room' });
+      if (!st.gameOver) return cb?.({ ok: false, reason: 'not-over' });
 
-    const side = st.players.get(socket.id);
-    if (!side) return cb?.({ ok: false, reason: 'not-in-room' });
+      const side = st.players.get(socket.id);
+      if (!side) return cb?.({ ok: false, reason: 'not-in-room' });
 
-    st.restart.votes.add(side);
-
-    io.to(roomId).emit('game:restart:state', {
-      votes: Array.from(st.restart.votes),
-      counting: st.restart.counting,
-      durationSec: st.restart.durationSec,
-      startedAt: st.restart.startedAt,
-    });
-
-    const bothReady = st.restart.votes.has('w') && st.restart.votes.has('b');
-    if (bothReady && !st.restart.counting) {
-      st.restart.counting = true;
-      st.restart.startedAt = Date.now();
+      st.restart.votes.add(side);
 
       io.to(roomId).emit('game:restart:state', {
         votes: Array.from(st.restart.votes),
-        counting: true,
+        counting: st.restart.counting,
         durationSec: st.restart.durationSec,
         startedAt: st.restart.startedAt,
       });
 
-      st.restart.timer = setTimeout(() => {
-        const newState = resetRoomInPlace(st);
-        rooms.set(roomId, newState);
+      const bothReady = st.restart.votes.has('w') && st.restart.votes.has('b');
+      if (bothReady && !st.restart.counting) {
+        st.restart.counting = true;
+        st.restart.startedAt = Date.now();
 
-        const startFen = new Chess().fen();
-        newState.fen = startFen;
-
-        // reset clock
-        if (newState.clock) {
-          newState.clock.w = INITIAL_CLOCK_SEC;
-          newState.clock.b = INITIAL_CLOCK_SEC;
-          newState.clock.running = null; // จะเริ่มใหม่เมื่อมีการเดินตาแรก
-        }
-
-        io.to(roomId).emit('game:reset', {
-          fen: startFen,
-          currentTurn: newState.turn,
+        io.to(roomId).emit('game:restart:state', {
+          votes: Array.from(st.restart.votes),
+          counting: true,
+          durationSec: st.restart.durationSec,
+          startedAt: st.restart.startedAt,
         });
 
-        // ส่งค่าเวลาเริ่มต้นไปให้ client ทันที
-        if (newState.clock) {
-          io.to(roomId).emit('clock:update', {
-            w: newState.clock.w,
-            b: newState.clock.b,
-            running: newState.clock.running,
+        st.restart.timer = setTimeout(() => {
+          const newState = resetRoomInPlace(st);
+          rooms.set(roomId, newState);
+
+          const startFen = new Chess().fen();
+          newState.fen = startFen;
+
+          // reset clock
+          if (newState.clock) {
+            newState.clock.w = INITIAL_CLOCK_SEC * 1000;
+            newState.clock.b = INITIAL_CLOCK_SEC * 1000;
+            newState.clock.running = null; // จะเริ่มใหม่เมื่อมีการเดินตาแรก
+            newState.clock.lastTickAt = null;
+          }
+
+          io.to(roomId).emit('game:reset', {
+            fen: startFen,
+            currentTurn: newState.turn,
           });
-        }
-        io.to(roomId).emit('card:counts', {
-          deck: newState.cards.deck.length,
-          graveyard: newState.cards.graveyard.length,
-        });
-      }, st.restart.durationSec * 1000);
-    }
 
-    cb?.({ ok: true });
+          // ส่งค่าเวลาเริ่มต้นไปให้ client ทันที
+          if (newState.clock) {
+            io.to(roomId).emit('clock:update', {
+              w: Math.ceil(newState.clock.w / 1000),
+              b: Math.ceil(newState.clock.b / 1000),
+              running: newState.clock.running,
+            });
+          }
+          io.to(roomId).emit('card:counts', {
+            deck: newState.cards.deck.length,
+            graveyard: newState.cards.graveyard.length,
+          });
+        }, st.restart.durationSec * 1000);
+      }
+
+      cb?.({ ok: true });
+    } catch (err) {
+      console.error('[game:restart:vote] error:', err);
+      cb?.({ ok: false, reason: 'server-error' });
+    }
   });
 });
 
-server.listen(3001, () => console.log('listening on *:3001'));
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => console.log(`listening on *:${PORT}`));
