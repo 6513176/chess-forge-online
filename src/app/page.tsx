@@ -108,11 +108,8 @@ export default function Home() {
               Live Multiplayer
             </div>
             <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500">
-              Forge Your Path to <br className="hidden md:block" /> Victory
+              CHESS <br className="hidden md:block" /> FORGE
             </h1>
-            <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-              Experience chess reimagined with powerful custom cards. Join the arena, cast spells, and outmaneuver your opponent in real-time.
-            </p>
           </div>
 
           <div className="pt-8">

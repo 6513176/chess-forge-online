@@ -682,15 +682,6 @@ io.on('connection', (socket) => {
       } = data;
       
       const st = rooms.get(roomId);
-      let enemyUserId = 'unknown';
-      if (st) {
-        for (const [sId, name] of st.playerNames.entries()) {
-          if (sId !== socket.id) {
-            enemyUserId = name;
-            break;
-          }
-        }
-      }
 
             let serverCardsPlayedList = [];
       if (st && st.cardsPlayedHistory) {
