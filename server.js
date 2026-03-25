@@ -459,7 +459,8 @@ io.on('connection', (socket) => {
       }
 
       // ถ้าเป็น extra move → ห้ามกิน "อะไรทั้งนั้น"
-      if (isExtraPhase && move.capturedPieceType) {
+      const hasPendingExtraMove = (st.extra?.[side] || 0) > 0;
+      if ((isExtraPhase || hasPendingExtraMove) && move.capturedPieceType) {
         socket.emit('game:moveRejected', {
           reason: 'Extra move allows movement only, no capturing',
         });

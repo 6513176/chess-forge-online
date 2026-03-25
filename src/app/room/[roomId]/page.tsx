@@ -8,6 +8,7 @@ import { joinRoom, socket } from '@/app/lib/socket';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/app/lib/firebase';
 import ExperienceSurvey from '@/app/components/ExperienceSurvey';
+import RulesModal from '@/app/components/RulesModal';
 
 // ---- Card types ----
 type CardId =
@@ -119,6 +120,7 @@ export default function RoomPage() {
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showRules, setShowRules] = useState(false);
 
   // Auth Guard
   useEffect(() => {
@@ -1051,6 +1053,13 @@ export default function RoomPage() {
             >
               Report Bug 🐛
             </button>
+            <button
+              onClick={() => setShowRules(true)}
+              className="px-3 py-1 text-xs rounded-lg bg-orange-600 hover:bg-orange-500 font-bold transition font-mono shadow-sm border border-orange-500 ml-2"
+              style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
+            >
+              Rules 📖
+            </button>
           </div>
         </div>
 
@@ -1481,9 +1490,10 @@ export default function RoomPage() {
             maxPing: pings.length > 0 ? Math.max(...pings) : 0,
             surveyAnswers: null
           });
-          setHasSubmittedSurvey(true);
         }}
       />
+
+      <RulesModal isOpen={showRules} onClose={() => setShowRules(false)} />
     </div>
   );
 }
