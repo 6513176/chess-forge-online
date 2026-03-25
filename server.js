@@ -688,14 +688,14 @@ io.on('connection', (socket) => {
       
       const st = rooms.get(roomId);
 
-            let serverCardsPlayedList = [];
+            let serverCardsPlayedList = []; let outcome = 'unknown', reason = 'unknown', mySide = null;
       if (st && st.cardsPlayedHistory) {
-        serverCardsPlayedList = st.cardsPlayedHistory.filter(c => c.socketId === socket.id).map(c => c.cardId);
+        serverCardsPlayedList = st.cardsPlayedHistory.filter(c => c.socketId === socket.id).map(c => c.cardId); mySide = st.players.get(socket.id); if (st.result) { reason = st.result.reason || st.result.type || 'unknown'; if (st.result.winner === 'draw') outcome = 'draw'; else if (st.result.winner === mySide) outcome = 'win'; else if (st.result.winner) outcome = 'loss'; }
       }
 
 const payload = {
         roomId,
-        email,
+        email, outcome, reason, mySide,
         userId: userId && userId !== 'guest' ? userId : socket.id,
         socketId: socket.id,
         timeLeftSeconds: timeLeft,

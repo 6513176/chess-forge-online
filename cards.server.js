@@ -137,7 +137,7 @@ export function playCardOnServer({
     case 'BUFF_EXTRA_MOVE': {
       st.extra[side] += 1
       st.cardPlayedBy = side
-      st.noKingBy = side // ห้ามกินคิงในเทิร์นนี้
+      st.noKingBy = side
 
       removeFromHand(st.cards, side, uid)
       syncHandToSide(roomId, side)
