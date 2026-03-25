@@ -1059,7 +1059,7 @@ function describeBuffsOnSquare(
           </div>
         </div>
 
-        <div className="w-full max-w-[90vw] sm:max-w-[560px] max-h-[45vh] sm:max-h-none aspect-square mx-auto self-center flex items-center justify-center">
+        <div className="w-[95vw] sm:w-[560px] max-w-full aspect-square mx-auto self-center flex items-center justify-center">
           <div className="w-full h-full relative">
             <Chessboard
               id="room-board"
