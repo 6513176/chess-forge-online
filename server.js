@@ -22,7 +22,7 @@ const cardName = (id) => {
     case 'BUFF_EXTRA_MOVE': return 'Forge (Extra Move)';
     case 'DEF_SHIELD': return 'Shield';
     case 'COUNTER_SACRIFICE': return 'Sacrifice';
-    case 'BUFF_PAWN_RANGE': return 'Range Buff';
+    case 'BUFF_PAWN_RANGE': return 'Hit and Run';
     case 'BUFF_SUMMON_PAWN': return 'Summon Pawn';
     case 'BUFF_SWAP_ALLY': return 'Swap';
     case 'DEF_SAFE_ZONE': return 'Safe Zone';
@@ -83,7 +83,7 @@ function freshRoomState() {
 
     // บัพ/โซน
     pawnRange: {}, // { 'e4': true }
-    hitAndRunActiveSquare: null,
+    hitAndRunActiveSquare: null, revivedSquareThisTurn: null,
     safeZone: { by: null, square: null }, // center ของโซน 3x3
     aoe: null, // { by, center, remaining }
 
@@ -290,7 +290,7 @@ io.on('connection', (socket) => {
         shield: st.shield,
         safeZone: st.safeZone,
         pawnRange: st.pawnRange,
-        hitAndRunActiveSquare: st.hitAndRunActiveSquare,
+        hitAndRunActiveSquare: st.hitAndRunActiveSquare, revivedSquareThisTurn: st.revivedSquareThisTurn,
         aoe: st.aoe,
         cardPlayedBy: st.cardPlayedBy,
         clock: st.clock
@@ -466,6 +466,11 @@ io.on('connection', (socket) => {
         return cb?.({ ok: false, reason: 'extra-move-no-capture' });
       }
 
+      if (st.revivedSquareThisTurn === move.from && move.capturedPieceType) {
+        socket.emit('game:moveRejected', { reason: 'Sacrificed piece cannot capture this turn.' });
+        return cb?.({ ok: false, reason: 'sacrificed-piece-no-capture' });
+      }
+
 
 
       // กันกินช่องที่เป็น safe zone (3x3 รอบ center)
@@ -547,12 +552,12 @@ io.on('connection', (socket) => {
         st.turn = opp(st.turn);
         st.cardPlayedBy = null;
         st.noKingBy = null;
-        st.hitAndRunActiveSquare = null;
+        st.hitAndRunActiveSquare = null; st.revivedSquareThisTurn = null;
         st.isExtraMovePhase[side] = false;
         io.to(roomId).emit('card:update', {
           cardPlayedBy: st.cardPlayedBy,
           noKingBy: st.noKingBy,
-          hitAndRunActiveSquare: null,
+          hitAndRunActiveSquare: null, revivedSquareThisTurn: null,
         });
 
         // โล่หมดอายุเมื่อเทิร์นวนกลับมาหาผู้ลงโล่
@@ -711,6 +716,19 @@ const payload = {
       }
     } catch (err) {
       console.error('[game:summary_report] error:', err);
+    }
+  });
+
+  socket.on('game:report_bug', ({ roomId, text, uid }, cb) => {
+    try {
+      if (db) {
+        db.collection('bug_reports').insertOne({
+          roomId, text, uid, createdAt: new Date()
+        }).catch(err => console.error('bug report err:', err));
+      }
+      cb?.({ ok: true });
+    } catch(err) {
+      cb?.({ ok: false });
     }
   });
 

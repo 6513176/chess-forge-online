@@ -346,7 +346,7 @@ export function playCardOnServer({
       st.pawnRange = {}
       st.noKingBy = null
       st.aoe = null
-      st.hitAndRunActiveSquare = null
+      st.hitAndRunActiveSquare = null; st.revivedSquareThisTurn = null;
 
       st.cardPlayedBy = side
 
@@ -359,7 +359,7 @@ export function playCardOnServer({
         safeZone: st.safeZone,
         pawnRange: st.pawnRange,
         aoe: st.aoe,
-        hitAndRunActiveSquare: st.hitAndRunActiveSquare,
+        hitAndRunActiveSquare: st.hitAndRunActiveSquare, revivedSquareThisTurn: st.revivedSquareThisTurn,
         noKingBy: st.noKingBy,
         cardPlayedBy: st.cardPlayedBy,
       })
@@ -395,7 +395,7 @@ export function playCardOnServer({
       st.fen = fenAdjusted
       st.lastCapture = null
       st.cardPlayedBy = side
-      st.noKingBy = side
+      st.noKingBy = side; st.revivedSquareThisTurn = lc.capturedSquare;
 
       removeFromHand(st.cards, side, uid)
       syncHandToSide(roomId, side)
@@ -406,7 +406,7 @@ export function playCardOnServer({
       })
       io.to(roomId).emit('card:update', {
         cardPlayedBy: st.cardPlayedBy,
-        noKingBy: st.noKingBy,
+        noKingBy: st.noKingBy, revivedSquareThisTurn: st.revivedSquareThisTurn,
       })
 
       return { ok: true }

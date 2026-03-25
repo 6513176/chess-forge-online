@@ -190,6 +190,7 @@ export default function RoomPage() {
   );
   const [pawnRange, setPawnRange] = useState<Record<string, boolean>>({}); // { square: true }
   const [hitAndRunActiveSquare, setHitAndRunActiveSquare] = useState<string | null>(null);
+  const [revivedSquareThisTurn, setRevivedSquareThisTurn] = useState<string | null>(null);
   const [aoe, setAoe] = useState<{ by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null>(
     null
   );
@@ -279,6 +280,7 @@ export default function RoomPage() {
       if (res.safeZone) setSafeZone(res.safeZone);
       if (res.pawnRange) setPawnRange(res.pawnRange);
       if (res.hitAndRunActiveSquare !== undefined) setHitAndRunActiveSquare(res.hitAndRunActiveSquare);
+      if (res.revivedSquareThisTurn !== undefined) setRevivedSquareThisTurn(res.revivedSquareThisTurn);
       if (res.aoe) setAoe(res.aoe);
       if (res.cardPlayedBy !== undefined) setCardPlayedBy(res.cardPlayedBy);
 
@@ -303,6 +305,7 @@ export default function RoomPage() {
         if (data.safeZone) setSafeZone(data.safeZone);
         if (data.pawnRange) setPawnRange(data.pawnRange);
         if (data.hitAndRunActiveSquare !== undefined) setHitAndRunActiveSquare(data.hitAndRunActiveSquare);
+        if (data.revivedSquareThisTurn !== undefined) setRevivedSquareThisTurn(data.revivedSquareThisTurn);
         if (data.aoe !== undefined) setAoe(data.aoe || null);
         if (data.cardPlayedBy !== undefined) setCardPlayedBy(data.cardPlayedBy);
       };
@@ -479,7 +482,7 @@ export default function RoomPage() {
     selectingSummonPawn ||
     selectingSwap ||
     selectingSafeZone ||
-    selectingAoe;
+    selectingAoe; function reportBug() { const text = prompt('Please describe the bug or report an issue:'); if (!text) return; const uid = user?.displayName || user?.uid || 'guest'; socket.emit('game:report_bug', { roomId, text, uid }, () => { alert('Thanks for your feedback!'); }); }
 
   // make move
   function handleMove({ from, to }: { from: Square; to: Square }) {
@@ -886,13 +889,13 @@ function describeBuffsOnSquare(
     shield: { by: 'w' | 'b' | null; square: string | null };
     safeZone: { by: 'w' | 'b' | null; square: string | null };
     pawnRange: Record<string, any>;
-    hitAndRunActiveSquare: string | null;
+    hitAndRunActiveSquare: string | null; revivedSquareThisTurn: string | null;
     aoe: { by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null;
   }
 ): string[] {
   if (!sq) return [];
   const buffs: string[] = [];
-  const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare } = opts;
+  const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare, revivedSquareThisTurn } = opts;
 
   if (shield.square === sq) {
     buffs.push('Shield: Immune to capture for 1 turn');
@@ -903,6 +906,9 @@ function describeBuffsOnSquare(
   }
   if (hitAndRunActiveSquare === sq) {
     buffs.push('Moving 2nd time (Cannot capture/move others)');
+  }
+  if (revivedSquareThisTurn === sq) {
+    buffs.push('Just Revived (Cannot capture this turn)');
   }
 
   if (hitAndRunActiveSquare) {
@@ -950,7 +956,7 @@ function describeBuffsOnSquare(
     const moves = gameRef.current.moves({ square: square as Square, verbose: true }) as any[] | string[];
     const out: Record<string, boolean> = {};
     if (!moves) return out;
-    for (const m of moves as any[]) {
+    for (const m of moves as any[]) { if (m && m.to && m.captured && (square as string) === revivedSquareThisTurn) continue;
       if (m && m.to) out[m.to] = true;
     }
     return out;
@@ -1024,6 +1030,13 @@ function describeBuffsOnSquare(
               style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
             >
               Home 🏠
+            </button>
+            <button
+              onClick={reportBug}
+              className="px-3 py-1 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 font-bold transition font-mono shadow-sm border border-indigo-500 ml-2"
+              style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
+            >
+              Report Bug 🐛
             </button>
           </div>
         </div>
@@ -1154,7 +1167,7 @@ function describeBuffsOnSquare(
                   shield,
                   safeZone,
                   pawnRange,
-                  hitAndRunActiveSquare,
+                  hitAndRunActiveSquare, revivedSquareThisTurn,
                   aoe,
                 });
                 if (!buffs.length) return 'No buffs';
