@@ -32,6 +32,7 @@ type JoinRoomOk = {
   extra: { w: number; b: number };
   shield: { by: 'w' | 'b' | null; square: string | null };
   cardPlayedBy: 'w' | 'b' | null;
+  connectedPlayers?: string[];
 };
 
 type JoinRoomErr = { ok: false; reason: string };
@@ -49,6 +50,7 @@ export async function joinRoom(roomId: string, userId: string = 'guest'): Promis
           extra: res.extra,
           shield: res.shield,
           cardPlayedBy: res.cardPlayedBy,
+          connectedPlayers: (res as any).connectedPlayers,
         });
       } else {
         resolve({ ok: false, reason: res?.reason || 'join-failed' });
