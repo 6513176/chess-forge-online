@@ -466,6 +466,13 @@ io.on('connection', (socket) => {
         return cb?.({ ok: false, reason: 'extra-move-no-capture' });
       }
 
+      if (st.hitAndRunActiveSquare === move.from && move.capturedPieceType) {
+        socket.emit('game:moveRejected', {
+          reason: 'Hit and Run second move allows movement only, no capturing',
+        });
+        return cb?.({ ok: false, reason: 'hit-and-run-no-capture' });
+      }
+
       if (st.revivedSquareThisTurn === move.from && move.capturedPieceType) {
         socket.emit('game:moveRejected', { reason: 'Sacrificed piece cannot capture this turn.' });
         return cb?.({ ok: false, reason: 'sacrificed-piece-no-capture' });
