@@ -279,10 +279,12 @@ io.on('connection', (socket) => {
       socket.join(roomId);
       st.players.set(socket.id, color);
       const side = color; // 'w' | 'b'
+      io.to(roomId).emit('players:connected', { connectedPlayers: Array.from(st.players.values()) });
 
       // ส่งสถานะทั้งหมดกลับไปเพื่อซิงก์ client
       ack?.({
         ok: true,
+        connectedPlayers: Array.from(st.players.values()),
         color: color === 'w' ? 'white' : 'black',
         currentTurn: st.turn,
         fen: st.fen,
@@ -321,6 +323,7 @@ io.on('connection', (socket) => {
 
           s.players.delete(socket.id);
           socket.to(roomId).emit('opponent-left');
+          io.to(roomId).emit('players:connected', { connectedPlayers: Array.from(s.players.values()) });
 
           if (s.players.size === 0) {
             // ถ้าไม่มีคนอยู่ในห้องแล้ว ให้หน่วงเวลา 5 นาที (300,000 ms) ก่อนลบห้อง
@@ -361,6 +364,7 @@ io.on('connection', (socket) => {
       const st = rooms.get(roomId);
       if (!st) return cb?.({ ok: false, reason: 'no-room' });
       if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
+      if (st.players.size < 2) return cb?.({ ok: false, reason: 'waiting-for-opponent' });
 
       const side = color === 'white' ? 'w' : 'b';
       if (st.turn !== side) return cb?.({ ok: false, reason: 'not-your-turn' });
@@ -439,6 +443,7 @@ io.on('connection', (socket) => {
       const st = rooms.get(roomId);
       if (!st) return cb?.({ ok: false, reason: 'no-room' });
       if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
+      if (st.players.size < 2) return cb?.({ ok: false, reason: 'waiting-for-opponent' });
 
       const side = st.players.get(socket.id);
       if (!side) return cb?.({ ok: false, reason: 'not-in-room' });
