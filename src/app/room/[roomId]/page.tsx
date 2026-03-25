@@ -294,7 +294,7 @@ export default function RoomPage() {
         setTimeLeft({ w: res.clock.w, b: res.clock.b });
         setClockRunning(res.clock.running ?? null);
       }
-            // ซิงก์ deck counts ถ้ามี
+      // ซิงก์ deck counts ถ้ามี
       if (typeof res.deckCount === 'number') setDeckCount(res.deckCount);
       if (typeof res.graveyardCount === 'number') setGraveyardCount(res.graveyardCount);
 
@@ -310,7 +310,7 @@ export default function RoomPage() {
         if (data.cardPlayedBy !== undefined) setCardPlayedBy(data.cardPlayedBy);
       };
 
-            const onGameMove = ({ fenAfter, currentTurn }: any) => {
+      const onGameMove = ({ fenAfter, currentTurn }: any) => {
         // อัปเดตกระดานจาก server -> โหลด FEN ใหม่
         gameRef.current.load(fenAfter);
         setFen(gameRef.current.fen());
@@ -323,7 +323,7 @@ export default function RoomPage() {
       };
 
 
-            const onReject = ({ reason }: any) => {
+      const onReject = ({ reason }: any) => {
         alert('Move rejected: ' + reason);
         setFen(gameRef.current.fen());
 
@@ -336,7 +336,7 @@ export default function RoomPage() {
       const onChat = ({ text, from }: any) =>
         setChat((c) => [...c, `${from}: ${text}`]);
 
-            const onCounterResolved = ({ fen, currentTurn }: any) => {
+      const onCounterResolved = ({ fen, currentTurn }: any) => {
         gameRef.current.load(fen);
         setFen(gameRef.current.fen());
         if (currentTurn) setTurn(currentTurn);
@@ -362,7 +362,7 @@ export default function RoomPage() {
         setRestartStartedAt(s.startedAt ?? null);
       };
 
-            const onReset = ({ fen, currentTurn }: any) => {
+      const onReset = ({ fen, currentTurn }: any) => {
         if (!mounted) return;
         window.location.reload();
       };
@@ -552,7 +552,7 @@ export default function RoomPage() {
 
   function confirmPendingTarget() {
     if (!pendingTarget) return;
-    
+
     socket.emit(
       'card:play',
       {
@@ -827,7 +827,7 @@ export default function RoomPage() {
     if (p.b) highlightTarget(p.b);
   }
 
-    // --- selected square + legal moves highlighting ---
+  // --- selected square + legal moves highlighting ---
   if (selectedSquare) {
     customSquareStyles[selectedSquare] = {
       ...(customSquareStyles[selectedSquare] || {}),
@@ -838,7 +838,7 @@ export default function RoomPage() {
   Object.keys(legalMovesMap).forEach((sq) => {
     customSquareStyles[sq] = {
       ...(customSquareStyles[sq] || {}),
-      backgroundColor: 'rgba(34,197,94,0.45)',  
+      backgroundColor: 'rgba(34,197,94,0.45)',
     };
   });
 
@@ -866,12 +866,12 @@ export default function RoomPage() {
       customSquareStyles[sq] = {
         ...(customSquareStyles[sq] || {}),
         boxShadow:
-          'inset 0 0 0 3px rgba(250,204,21,0.75)', 
-          backgroundColor: 'rgba(250,204,94,0.45)',  
+          'inset 0 0 0 3px rgba(250,204,21,0.75)',
+        backgroundColor: 'rgba(250,204,94,0.45)',
       };
     });
   }
-  
+
   if (hoverSquare && (selectingAoe || selectingSafeZone)) {
     const area = getArea3x3(hoverSquare);
     Object.keys(area).forEach((sq) => {
@@ -883,60 +883,60 @@ export default function RoomPage() {
     });
   }
 
-function describeBuffsOnSquare(
-  sq: string | null,
-  opts: {
-    shield: { by: 'w' | 'b' | null; square: string | null };
-    safeZone: { by: 'w' | 'b' | null; square: string | null };
-    pawnRange: Record<string, any>;
-    hitAndRunActiveSquare: string | null; revivedSquareThisTurn: string | null;
-    aoe: { by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null;
-  }
-): string[] {
-  if (!sq) return [];
-  const buffs: string[] = [];
-  const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare, revivedSquareThisTurn } = opts;
-
-  if (shield.square === sq) {
-    buffs.push('Shield: Immune to capture for 1 turn');
-  }
-
-  if (pawnRange[sq]) {
-    buffs.push('Hit and Run: Move twice (2nd move cannot capture)');
-  }
-  if (hitAndRunActiveSquare === sq) {
-    buffs.push('Moving 2nd time (Cannot capture/move others)');
-  }
-  if (revivedSquareThisTurn === sq) {
-    buffs.push('Just Revived (Cannot capture this turn)');
-  }
-
-  if (hitAndRunActiveSquare) {
-    customSquareStyles[hitAndRunActiveSquare] = {
-      ...(customSquareStyles[hitAndRunActiveSquare] || {}),
-      boxShadow: 'inset 0 0 15px 4px rgba(234,88,12,0.8)', // orange glow
-      backgroundColor: 'rgba(234,88,12,0.3)',
-    };
-  }
-
-  if (safeZone.square) {
-    const area = getArea3x3(safeZone.square);
-    if (area[sq]) {
-      buffs.push('Safe Zone: 3x3 Safe Area');
+  function describeBuffsOnSquare(
+    sq: string | null,
+    opts: {
+      shield: { by: 'w' | 'b' | null; square: string | null };
+      safeZone: { by: 'w' | 'b' | null; square: string | null };
+      pawnRange: Record<string, any>;
+      hitAndRunActiveSquare: string | null; revivedSquareThisTurn: string | null;
+      aoe: { by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null;
     }
-  }
+  ): string[] {
+    if (!sq) return [];
+    const buffs: string[] = [];
+    const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare, revivedSquareThisTurn } = opts;
 
-  if (aoe?.center) {
-    const area = getArea3x3(aoe.center);
-    if (area[sq]) {
-      buffs.push(
-        `AOE Zone: Blast Area (Remaining ${aoe.remaining ?? '?'} turn for caster)`
-      );
+    if (shield.square === sq) {
+      buffs.push('Shield: Immune to capture for 1 turn');
     }
-  }
 
-  return buffs;
-}
+    if (pawnRange[sq]) {
+      buffs.push('Hit and Run: Move twice (2nd move cannot capture)');
+    }
+    if (hitAndRunActiveSquare === sq) {
+      buffs.push('Moving 2nd time (Cannot capture/move others)');
+    }
+    if (revivedSquareThisTurn === sq) {
+      buffs.push('Just Revived (Cannot capture this turn)');
+    }
+
+    if (hitAndRunActiveSquare) {
+      customSquareStyles[hitAndRunActiveSquare] = {
+        ...(customSquareStyles[hitAndRunActiveSquare] || {}),
+        boxShadow: 'inset 0 0 15px 4px rgba(234,88,12,0.8)', // orange glow
+        backgroundColor: 'rgba(234,88,12,0.3)',
+      };
+    }
+
+    if (safeZone.square) {
+      const area = getArea3x3(safeZone.square);
+      if (area[sq]) {
+        buffs.push('Safe Zone: 3x3 Safe Area');
+      }
+    }
+
+    if (aoe?.center) {
+      const area = getArea3x3(aoe.center);
+      if (area[sq]) {
+        buffs.push(
+          `AOE Zone: Blast Area (Remaining ${aoe.remaining ?? '?'} turn for caster)`
+        );
+      }
+    }
+
+    return buffs;
+  }
   // คืน object map ของช่องที่เดินไปได้ เช่น { e4: true, d5: true }
   function computeLegalMovesFrom(square: Square | null) {
     if (!square) return {};
@@ -953,28 +953,29 @@ function describeBuffsOnSquare(
       }
 
       // บอก TS ว่า square เป็น Square
-    const moves = gameRef.current.moves({ square: square as Square, verbose: true }) as any[] | string[];
-    const out: Record<string, boolean> = {};
-    if (!moves) return out;
-    for (const m of moves as any[]) { if (m && m.to && m.captured && (square as string) === revivedSquareThisTurn) continue;
-      if (m && m.to) out[m.to] = true;
+      const moves = gameRef.current.moves({ square: square as Square, verbose: true }) as any[] | string[];
+      const out: Record<string, boolean> = {};
+      if (!moves) return out;
+      for (const m of moves as any[]) {
+        if (m && m.to && m.captured && (square as string) === revivedSquareThisTurn) continue;
+        if (m && m.to) out[m.to] = true;
+      }
+      return out;
+    } catch {
+      return {};
     }
-    return out;
-  } catch {
-    return {};
   }
-}
 
   // AOE center highlight (วงสีชมพู)
-    // AOE center highlight (วงสีชมพู)
-    // AOE 3×3 highlight (ชมพู)
+  // AOE center highlight (วงสีชมพู)
+  // AOE 3×3 highlight (ชมพู)
   if (aoe?.center) {
     const area = getArea3x3(aoe.center);
     Object.keys(area).forEach((sq) => {
       customSquareStyles[sq] = {
         ...(customSquareStyles[sq] || {}),
         boxShadow: 'inset 0 0 0 3px rgba(244,114,182,1)',
-        backgroundColor: 'rgba(34,5,5,0.45)', 
+        backgroundColor: 'rgba(34,5,5,0.45)',
       };
     });
   }
@@ -1019,7 +1020,7 @@ function describeBuffsOnSquare(
               <button
                 onClick={resignGame}
                 className="px-3 py-1 text-xs rounded-lg bg-red-600 hover:bg-red-700 font-bold transition font-mono shadow-sm border border-red-500"
-                style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
+                style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
               >
                 Resign 🏳️
               </button>
@@ -1027,14 +1028,14 @@ function describeBuffsOnSquare(
             <button
               onClick={() => window.location.href = '/'}
               className="px-3 py-1 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 font-bold transition font-mono shadow-sm border border-slate-600 ml-2"
-              style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
+              style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
             >
               Home 🏠
             </button>
             <button
               onClick={reportBug}
               className="px-3 py-1 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 font-bold transition font-mono shadow-sm border border-indigo-500 ml-2"
-              style={{textShadow: "0 1px 2px rgba(0,0,0,0.5)"}}
+              style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
             >
               Report Bug 🐛
             </button>
@@ -1044,16 +1045,14 @@ function describeBuffsOnSquare(
         {/* CLOCK UI */}
         <div className="flex justify-center gap-4 mt-1 text-sm">
           <div
-            className={`px-3 py-1 rounded-lg ${
-              clockRunning === 'w' ? 'bg-emerald-600' : 'bg-gray-700'
-            }`}
+            className={`px-3 py-1 rounded-lg ${clockRunning === 'w' ? 'bg-emerald-600' : 'bg-gray-700'
+              }`}
           >
             White ⏱ {formatTime(timeLeft.w)}
           </div>
           <div
-            className={`px-3 py-1 rounded-lg ${
-              clockRunning === 'b' ? 'bg-emerald-600' : 'bg-gray-700'
-            }`}
+            className={`px-3 py-1 rounded-lg ${clockRunning === 'b' ? 'bg-emerald-600' : 'bg-gray-700'
+              }`}
           >
             Black ⏱ {formatTime(timeLeft.b)}
           </div>
@@ -1081,11 +1080,11 @@ function describeBuffsOnSquare(
                 const my = meSide === 'w' ? 'w' : 'b';
                 return piece.startsWith(my);
               }}
-                            onPieceDrop={(source: string, target: string) => {
+              onPieceDrop={(source: string, target: string) => {
                 if (anySelecting) return false;
                 if (hitAndRunActiveSquare && source !== hitAndRunActiveSquare) {
-                   alert('You must move the active hit and run piece.');
-                   return false;
+                  alert('You must move the active hit and run piece.');
+                  return false;
                 }
                 const ok = !!handleMove({ from: source as Square, to: target as Square });
                 // ถ้าทำสำเร็จ ให้ล้าง selection / legal highlights
@@ -1096,7 +1095,7 @@ function describeBuffsOnSquare(
                 return ok;
               }}
 
-                            onSquareClick={(sq: string) => {
+              onSquareClick={(sq: string) => {
                 const square = sq as Square;
 
                 // ถ้าอยู่ในโหมดเลือกการ์ด ให้ไป handler การ์ดก่อน
@@ -1159,22 +1158,22 @@ function describeBuffsOnSquare(
               customBoardStyle={{ borderRadius: 12 }}
               customSquareStyles={customSquareStyles}
             />
-             {hoverSquare && (
-            <div className="mt-1 text-xs text-gray-300 text-center">
-              <span className="font-mono mr-1">{hoverSquare}:</span>
-              {(() => {
-                const buffs = describeBuffsOnSquare(hoverSquare, {
-                  shield,
-                  safeZone,
-                  pawnRange,
-                  hitAndRunActiveSquare, revivedSquareThisTurn,
-                  aoe,
-                });
-                if (!buffs.length) return 'No buffs';
-                return buffs.join(' | ');
-              })()}
-            </div>
-          )}
+            {hoverSquare && (
+              <div className="mt-1 text-xs text-gray-300 text-center">
+                <span className="font-mono mr-1">{hoverSquare}:</span>
+                {(() => {
+                  const buffs = describeBuffsOnSquare(hoverSquare, {
+                    shield,
+                    safeZone,
+                    pawnRange,
+                    hitAndRunActiveSquare, revivedSquareThisTurn,
+                    aoe,
+                  });
+                  if (!buffs.length) return 'No buffs';
+                  return buffs.join(' | ');
+                })()}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1224,36 +1223,36 @@ function describeBuffsOnSquare(
               const t = themes[tKey];
 
               return (
-                <div 
-                  key={c.uid} 
-                  onClick={() => { 
+                <div
+                  key={c.uid}
+                  onClick={() => {
                     if (playable && lockedCardId !== c.uid) {
                       setLockedCardId(c.uid);
                       playCard(c);
                     }
                   }}
                   className={`relative shrink-0 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 snap-center
-                    ${isLocked 
-                      ? `w-40 h-56 sm:w-48 sm:h-72 md:w-56 md:h-80 z-50 -translate-y-4 md:-translate-y-6 ${t.shadow} ${t.activeBorder} scale-105 mx-1 md:mx-2` 
+                    ${isLocked
+                      ? `w-40 h-56 sm:w-48 sm:h-72 md:w-56 md:h-80 z-50 -translate-y-4 md:-translate-y-6 ${t.shadow} ${t.activeBorder} scale-105 mx-1 md:mx-2`
                       : `w-28 h-40 sm:w-36 sm:h-52 md:w-44 md:h-64 ${playable ? `cursor-pointer hover:-translate-y-2 md:hover:-translate-y-4 ${t.hoverShadow} border ${t.border} ${t.hoverBorder}` : 'cursor-not-allowed opacity-60 grayscale-[50%] border border-gray-700'}`
                     }
                     group bg-gray-900 flex flex-col justify-between
                   `}
                 >
-                  <img 
-                    src={`/cards/${c.id}.png`} 
+                  <img
+                    src={`/cards/${c.id}.png`}
                     alt={c.name}
                     className="absolute inset-0 w-full h-full object-cover z-0 transition-transform duration-500 group-hover:scale-110"
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
-                  
+
                   <div className={`absolute inset-0 bg-gradient-to-b ${t.gradient} z-10 pointer-events-none`} />
 
                   <div className="relative z-20 p-4 flex flex-col h-full justify-between pointer-events-none">
                     <div>
-                      <div className="font-extrabold text-sm sm:text-base md:text-xl text-white tracking-wide uppercase drop-shadow-md" style={{textShadow: "0 2px 4px rgba(0,0,0,0.8)"}}>{c.name}</div>
-                      
-                      <div className={`text-[10px] sm:text-xs text-slate-200 mt-1 md:mt-2 font-medium leading-relaxed md:leading-relaxed drop-shadow-md bg-black/50 p-1.5 md:p-2.5 rounded-lg backdrop-blur-md border border-white/10 transition-opacity duration-300 ${isLocked ? 'opacity-100' : 'opacity-0 hidden'}`} style={{textShadow: "0 1px 2px rgba(0,0,0,0.8)"}}>
+                      <div className="font-extrabold text-sm sm:text-base md:text-xl text-white tracking-wide uppercase drop-shadow-md" style={{ textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}>{c.name}</div>
+
+                      <div className={`text-[10px] sm:text-xs text-slate-200 mt-1 md:mt-2 font-medium leading-relaxed md:leading-relaxed drop-shadow-md bg-black/50 p-1.5 md:p-2.5 rounded-lg backdrop-blur-md border border-white/10 transition-opacity duration-300 ${isLocked ? 'opacity-100' : 'opacity-0 hidden'}`} style={{ textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>
                         {c.desc}
                       </div>
                     </div>
@@ -1276,7 +1275,7 @@ function describeBuffsOnSquare(
                               SELECT TARGET
                             </div>
                           )}
-                          
+
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1314,7 +1313,7 @@ function describeBuffsOnSquare(
 
         {/* STATUS + INVITE */}
         <div className="text-sm opacity-80 space-y-1 flex-shrink-0">
-                  
+
           <div className="flex items-center gap-2">
             <input
               className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1"
@@ -1394,16 +1393,14 @@ function describeBuffsOnSquare(
                 <div className="text-sm mb-1">Readiness:</div>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      restartVotes.has('w') ? 'bg-emerald-600' : 'bg-gray-700'
-                    }`}
+                    className={`px-2 py-1 rounded text-xs ${restartVotes.has('w') ? 'bg-emerald-600' : 'bg-gray-700'
+                      }`}
                   >
                     White {restartVotes.has('w') ? '✔' : '…'}
                   </span>
                   <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      restartVotes.has('b') ? 'bg-emerald-600' : 'bg-gray-700'
-                    }`}
+                    className={`px-2 py-1 rounded text-xs ${restartVotes.has('b') ? 'bg-emerald-600' : 'bg-gray-700'
+                      }`}
                   >
                     Black {restartVotes.has('b') ? '✔' : '…'}
                   </span>
@@ -1442,7 +1439,7 @@ function describeBuffsOnSquare(
         </div>
       )}
 
-      <ExperienceSurvey 
+      <ExperienceSurvey
         isOpen={isOver && !hasSubmittedSurvey}
         onSubmit={(answers) => {
           const timeL = meSide === 'w' ? timeLeft.w : timeLeft.b;

@@ -133,7 +133,7 @@ export function playCardOnServer({
   }
 
   switch (card) {
-    // -------- BUFF / Utility --------
+
     case 'BUFF_EXTRA_MOVE': {
       st.extra[side] += 1
       st.cardPlayedBy = side
@@ -160,7 +160,7 @@ export function playCardOnServer({
         return { ok: false, reason: 'not-your-piece' }
       }
 
-      // ✅ แปะบัพติดตัวที่ช่องนี้ (ใช้กับทุกตัว ไม่จำกัดแค่ pawn)
+
       if (!st.pawnRange) st.pawnRange = {}
       st.pawnRange[sq] = { by: side }
 

@@ -106,7 +106,7 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
         <div id="survey-scroll-area" className="p-6 overflow-y-auto flex-1 custom-scrollbar scroll-smooth">
           <div className="mb-6 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-200 text-sm">
             Please indicate how much you agree or disagree with each statement based on the match you just played.<br />
-            (1 = Strongly Disagree, 5 = Strongly Agree)
+            (1 = Strongly Disagree, 7 = Strongly Agree)
           </div>
 
           <div className="space-y-4">
@@ -117,12 +117,13 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
                   {q.text}
                 </p>
                 <div className="flex justify-between items-center max-w-2xl mx-auto gap-2">
-                  <span className="text-xs text-gray-500 w-24 text-right">Strongly Disagree</span>
-                  {[1, 2, 3, 4, 5].map((val) => (
+                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 text-right leading-tight">Strongly Disagree</span>
+                  <div className="flex gap-1 sm:gap-2">
+                  {[1, 2, 3, 4, 5, 6, 7].map((val) => (
                     <label 
                       key={val} 
                       className={`
-                        w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-2 transition-all font-bold text-lg
+                        w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center cursor-pointer border-2 transition-all font-bold text-sm sm:text-base
                         ${answers[q.id] === val 
                           ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-110' 
                           : 'bg-black/50 border-gray-700 text-gray-400 hover:border-gray-500 hover:bg-gray-800'}
@@ -138,7 +139,8 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
                       {val}
                     </label>
                   ))}
-                  <span className="text-xs text-gray-500 w-24">Strongly Agree</span>
+                  </div>
+                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 leading-tight">Strongly Agree</span>
                  </div>
               </div>
             ))}
