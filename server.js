@@ -674,6 +674,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('game:ping', (cb) => { if (typeof cb === 'function') cb(); });
   // ---------- SUMMARY REPORT (Consolidated Analytics) ----------
   socket.on('game:summary_report', (data) => {
     try {
@@ -682,7 +683,7 @@ io.on('connection', (socket) => {
         userId, email,
         timeLeft, 
         cardsPlayed, 
-        connectionTimeMs, 
+        connectionTimeMs, avgPing, maxPing,
         surveyAnswers 
       } = data;
       
@@ -702,7 +703,7 @@ const payload = {
         cardsPlayedCount: serverCardsPlayedList.length,
         cardsPlayedList: serverCardsPlayedList,
         connectionTimeMs,
-        hasCompletedSurvey: surveyAnswers !== null,
+        hasCompletedSurvey: surveyAnswers !== null, avgPing, maxPing,
         ...(surveyAnswers || {}),
         createdAt: new Date()
       };

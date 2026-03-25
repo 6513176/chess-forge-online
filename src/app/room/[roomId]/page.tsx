@@ -147,6 +147,7 @@ export default function RoomPage() {
   );
   const [hasSubmittedSurvey, setHasSubmittedSurvey] = useState(false);
   const [connectionTimeMs, setConnectionTimeMs] = useState(0);
+  const [pings, setPings] = useState<number[]>([]);
   const [cardsPlayedLog, setCardsPlayedLog] = useState<string[]>([]);
   const [checkSide, setCheckSide] = useState<'w' | 'b' | null>(null);
 
@@ -158,6 +159,17 @@ export default function RoomPage() {
   const [restartDuration, setRestartDuration] = useState<number>(5);
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [legalMovesMap, setLegalMovesMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!socket || isOver) return;
+    const interval = setInterval(() => {
+      const start = Date.now();
+      socket.emit('game:ping', () => {
+        setPings(prev => [...prev, Date.now() - start]);
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [socket, isOver]);
   // clock จาก server
   const [timeLeft, setTimeLeft] = useState<{ w: number; b: number }>({
     w: INITIAL_TIME, // เดี๋ยว joinRoom จะทับด้วยค่าจริงจาก server
@@ -1450,6 +1462,8 @@ export default function RoomPage() {
             timeLeft: timeL,
             cardsPlayed: cardsPlayedLog,
             connectionTimeMs,
+            avgPing: pings.length > 0 ? Math.round(pings.reduce((a,b)=>a+b,0)/pings.length) : 0,
+            maxPing: pings.length > 0 ? Math.max(...pings) : 0,
             surveyAnswers: answers
           });
           setHasSubmittedSurvey(true);
@@ -1463,6 +1477,8 @@ export default function RoomPage() {
             timeLeft: timeL,
             cardsPlayed: cardsPlayedLog,
             connectionTimeMs,
+            avgPing: pings.length > 0 ? Math.round(pings.reduce((a,b)=>a+b,0)/pings.length) : 0,
+            maxPing: pings.length > 0 ? Math.max(...pings) : 0,
             surveyAnswers: null
           });
           setHasSubmittedSurvey(true);
