@@ -141,9 +141,10 @@ export default function RoomPage() {
   const [turn, setTurn] = useState<'w' | 'b'>('w');
   const [color, setColor] = useState<'white' | 'black' | null>(null);
   const [hoverSquare, setHoverSquare] = useState<string | null>(null);
-
+  const [connectedPlayers, setConnectedPlayers] = useState<string[]>([]);
 
   const [isOver, setIsOver] = useState(false);
+  const isWaitingForOpponent = connectedPlayers.length < 2 && !isOver;
   const [result, setResult] = useState<{ type: string; winner?: 'w' | 'b' } | null>(
     null
   );
@@ -276,6 +277,7 @@ export default function RoomPage() {
 
       setColor(res.color!);
       if (res.currentTurn) setTurn(res.currentTurn);
+      if (res.connectedPlayers) setConnectedPlayers(res.connectedPlayers);
 
       // โหลด FEN ปัจจุบันจาก server
       if (res.fen) {
@@ -381,6 +383,10 @@ export default function RoomPage() {
         window.location.reload();
       };
 
+      const onPlayersConnected = ({ connectedPlayers }: any) => {
+        if (!mounted) return;
+        setConnectedPlayers(connectedPlayers || []);
+      };
 
       // register
       socket.on('card:update', onCardUpdate);
@@ -392,6 +398,7 @@ export default function RoomPage() {
       socket.on('game:over', onOver);
       socket.on('game:restart:state', onRestartState);
       socket.on('game:reset', onReset);
+      socket.on('players:connected', onPlayersConnected);
 
       // cleanup สำหรับ effect นี้
       return () => {
@@ -404,6 +411,7 @@ export default function RoomPage() {
         socket.off('game:over', onOver);
         socket.off('game:restart:state', onRestartState);
         socket.off('game:reset', onReset);
+        socket.off('players:connected', onPlayersConnected);
       };
     })();
 
@@ -609,6 +617,10 @@ export default function RoomPage() {
 
   // ---- play cards ----
   function playCard(card: CardInstance) {
+    if (isWaitingForOpponent) {
+      alert('Waiting for opponent to join...');
+      return;
+    }
     if (!meSide || turn !== meSide) return;
 
     // ป้องกันPlayหลายcardsในเทิร์นเดียว
@@ -1030,6 +1042,21 @@ export default function RoomPage() {
               You are: <b>{color ?? 'Joining room...'}</b> | Turn:{' '}
               <b>{turn === 'w' ? 'white' : 'black'}</b>
             </div>
+            <div className="flex items-center ml-2 border-l border-gray-700 pl-3 min-w-[140px]">
+              {meSide ? (
+                connectedPlayers.includes(meSide === 'w' ? 'b' : 'w') ? (
+                  <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                    <span className="relative flex h-2 w-2 shadow-[0_0_10px_rgba(52,211,153,0.8)]"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+                    Opponent Connected
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs text-rose-400 font-medium opacity-80">
+                    <span className="relative flex h-2 w-2"><span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span></span>
+                    Opponent Missing
+                  </span>
+                )
+              ) : null}
+            </div>
             {!isOver && meSide && (
               <button
                 onClick={resignGame}
@@ -1081,6 +1108,14 @@ export default function RoomPage() {
 
         <div className="w-[95vw] sm:w-[560px] max-w-full aspect-square mx-auto self-center flex items-center justify-center">
           <div className="w-full h-full relative">
+            {isWaitingForOpponent && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] rounded-xl pointer-events-none">
+                <div className="bg-gray-900 border border-indigo-500/50 px-6 py-4 rounded-xl text-center shadow-xl animate-pulse">
+                  <div className="text-lg font-bold text-white mb-1">Waiting for Opponent</div>
+                  <div className="text-sm text-gray-300">The game will start when both players join.</div>
+                </div>
+              </div>
+            )}
             <Chessboard
               id="room-board"
               position={fen}
@@ -1094,15 +1129,15 @@ export default function RoomPage() {
                 setHoverSquare(null);
               }}
               arePiecesDraggable={
-                !isOver && !!meSide && turn === meSide && !anySelecting
+                !isOver && !isWaitingForOpponent && !!meSide && turn === meSide && !anySelecting
               }
               isDraggablePiece={({ piece }) => {
-                if (!meSide || turn !== meSide || anySelecting) return false;
+                if (isWaitingForOpponent || !meSide || turn !== meSide || anySelecting) return false;
                 const my = meSide === 'w' ? 'w' : 'b';
                 return piece.startsWith(my);
               }}
               onPieceDrop={(source: string, target: string) => {
-                if (anySelecting) return false;
+                if (anySelecting || isWaitingForOpponent) return false;
                 if (hitAndRunActiveSquare && source !== hitAndRunActiveSquare) {
                   alert('You must move the active hit and run piece.');
                   return false;
@@ -1130,7 +1165,7 @@ export default function RoomPage() {
 
                 // ถ้าไม่ใช่โหมดการ์ด: เลือกหมาก / เดินผ่านคลิก
                 // ถ้าไม่มีสิทธิ์ (ไม่ใช่เทิร์นเรา) ปิดการเลือก
-                if (!meSide || turn !== meSide) {
+                if (isWaitingForOpponent || !meSide || turn !== meSide) {
                   setSelectedSquare(null);
                   setLegalMovesMap({});
                   return;
