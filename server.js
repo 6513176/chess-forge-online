@@ -459,7 +459,7 @@ io.on('connection', (socket) => {
       }
 
       // ถ้าเป็น extra move → ห้ามกิน "อะไรทั้งนั้น"
-      if (false && isExtraPhase && move.capturedPieceType) {
+      if (isExtraPhase && move.capturedPieceType) {
         socket.emit('game:moveRejected', {
           reason: 'Extra move allows movement only, no capturing',
         });

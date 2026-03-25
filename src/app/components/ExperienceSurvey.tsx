@@ -106,7 +106,7 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
         <div id="survey-scroll-area" className="p-6 overflow-y-auto flex-1 custom-scrollbar scroll-smooth">
           <div className="mb-6 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-200 text-sm">
             Please indicate how much you agree or disagree with each statement based on the match you just played.<br />
-            (1 = Strongly Disagree, 7 = Strongly Agree)
+            {step === 1 ? '(1 = Strongly Disagree, 7 = Strongly Agree)' : '(0 = Not at all, 4 = Extremely)'}
           </div>
 
           <div className="space-y-4">
@@ -117,9 +117,11 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
                   {q.text}
                 </p>
                 <div className="flex justify-between items-center max-w-2xl mx-auto gap-2">
-                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 text-right leading-tight">Strongly Disagree</span>
+                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 text-right leading-tight">
+                    {step === 1 ? 'Strongly Disagree' : 'Not at all'}
+                  </span>
                   <div className="flex gap-1 sm:gap-2">
-                  {[1, 2, 3, 4, 5, 6, 7].map((val) => (
+                  {(step === 1 ? [1, 2, 3, 4, 5, 6, 7] : [0, 1, 2, 3, 4]).map((val) => (
                     <label 
                       key={val} 
                       className={`
@@ -140,7 +142,9 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
                     </label>
                   ))}
                   </div>
-                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 leading-tight">Strongly Agree</span>
+                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 leading-tight">
+                    {step === 1 ? 'Strongly Agree' : 'Extremely'}
+                  </span>
                  </div>
               </div>
             ))}
