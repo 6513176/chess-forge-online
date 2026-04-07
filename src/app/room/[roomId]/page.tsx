@@ -522,10 +522,28 @@ export default function RoomPage() {
     let fenNow = gameRef.current.fen();
     const parts = fenNow.split(' ');
     if (parts[1] !== meSide) {
-      parts[1] = meSide;
-      const adjustedFen = parts.join(' ');
-      const temp = new Chess(adjustedFen);
-      gameRef.current = temp;
+      // We must bypass chess.js check limitation: if opponent is in check, we can't manually set turn to our side.
+      // So we temporarily lift our sprinting piece, change the turn, and drop it back!
+      let liftedPiece: any = null;
+      let liftSquare: any = hitAndRunActiveSquare;
+      if (liftSquare) {
+         liftedPiece = gameRef.current.remove(liftSquare);
+      }
+      
+      const unthreatenedFen = gameRef.current.fen();
+      const p = unthreatenedFen.split(' ');
+      p[1] = meSide;
+      const adjustedFen = p.join(' ');
+      
+      try {
+        const temp = new Chess(adjustedFen);
+        if (liftedPiece && liftSquare) {
+           temp.put(liftedPiece, liftSquare); 
+        }
+        gameRef.current = temp;
+      } catch {
+        // Fallback
+      }
     }
 
     const game = gameRef.current;
@@ -1003,9 +1021,26 @@ export default function RoomPage() {
         let fenNow = gameRef.current.fen();
         const parts = fenNow.split(' ');
         if (parts[1] !== meSide) {
-          parts[1] = meSide;
-          const adjustedFen = parts.join(' ');
-          gameRef.current = new Chess(adjustedFen);
+          let liftedPiece: any = null;
+          let liftSquare: any = hitAndRunActiveSquare;
+          if (liftSquare) {
+             liftedPiece = gameRef.current.remove(liftSquare as any);
+          }
+          
+          const unthreatenedFen = gameRef.current.fen();
+          const p = unthreatenedFen.split(' ');
+          p[1] = meSide;
+          const adjustedFen = p.join(' ');
+          
+          try {
+            const temp = new Chess(adjustedFen);
+            if (liftedPiece && liftSquare) {
+               temp.put(liftedPiece, liftSquare as any); 
+            }
+            gameRef.current = temp;
+          } catch {
+            // Fallback
+          }
         }
       }
 
