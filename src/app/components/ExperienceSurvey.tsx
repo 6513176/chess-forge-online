@@ -162,34 +162,34 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
               </div>
 
               <div className="bg-white/5 p-5 rounded-xl border border-white/5">
-                <label className="block text-white mb-2 font-medium">How long have you played board games?</label>
+                <label className="block text-white mb-2 font-medium">How frequently do you play board games?</label>
                 <select
                   value={answers.boardGameExp || ''}
                   onChange={(e) => handleSelect('boardGameExp', e.target.value)}
                   className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
                 >
                   <option value="" disabled>Select option</option>
-                  <option value="never">Never played</option>
-                  <option value="<1">Less than 1 year</option>
-                  <option value="1-3">1-3 years</option>
-                  <option value="3-5">3-5 years</option>
-                  <option value=">5">More than 5 years</option>
+                  <option value="never">Never</option>
+                  <option value="rarely">Rarely</option>
+                  <option value="sometimes">Sometimes</option>
+                  <option value="often">Often</option>
+                  <option value="regularly">Regularly</option>
                 </select>
               </div>
 
               <div className="bg-white/5 p-5 rounded-xl border border-white/5">
-                <label className="block text-white mb-2 font-medium">How long have you played chess?</label>
+                <label className="block text-white mb-2 font-medium">How frequently do you play chess?</label>
                 <select
                   value={answers.chessExp || ''}
                   onChange={(e) => handleSelect('chessExp', e.target.value)}
                   className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
                 >
                   <option value="" disabled>Select option</option>
-                  <option value="never">Never played</option>
-                  <option value="<1">Less than 1 year</option>
-                  <option value="1-3">1-3 years</option>
-                  <option value="3-5">3-5 years</option>
-                  <option value=">5">More than 5 years</option>
+                  <option value="never">Never</option>
+                  <option value="rarely">Rarely</option>
+                  <option value="sometimes">Sometimes</option>
+                  <option value="often">Often</option>
+                  <option value="regularly">Regularly</option>
                 </select>
               </div>
             </div>

@@ -19,15 +19,14 @@ client.connect()
 
 const cardName = (id) => {
   switch (id) {
-    case 'BUFF_EXTRA_MOVE': return 'Forge (Extra Move)';
-    case 'DEF_SHIELD': return 'Shield';
-    case 'COUNTER_SACRIFICE': return 'Sacrifice';
-    case 'BUFF_PAWN_RANGE': return 'Hit and Run';
-    case 'BUFF_SUMMON_PAWN': return 'Summon Pawn';
-    case 'BUFF_SWAP_ALLY': return 'Swap';
-    case 'DEF_SAFE_ZONE': return 'Safe Zone';
-    case 'AOE_BLAST': return 'RNG Blast';
-    case 'CLEANSE_BUFFS': return 'Cleanse';
+    case 'SHIELD': return 'Shield';
+    case 'SACRIFICE': return 'Sacrifice';
+    case 'FORGE': return 'Forge';
+    case 'SUMMON_PAWN': return 'Summon Pawn';
+    case 'SWAP_ALLY': return 'Swap';
+    case 'SAFE_ZONE': return 'Safe Zone';
+    case 'RNG_BLAST': return 'RNG Blast';
+    case 'CLEANSE': return 'Cleanse';
     default: return id;
   }
 };
@@ -470,12 +469,6 @@ io.on('connection', (socket) => {
         return cb?.({ ok: false, reason: 'extra-move-no-capture' });
       }
 
-      if (st.hitAndRunActiveSquare === move.from && move.capturedPieceType) {
-        socket.emit('game:moveRejected', {
-          reason: 'Hit and Run second move allows movement only, no capturing',
-        });
-        return cb?.({ ok: false, reason: 'hit-and-run-no-capture' });
-      }
 
       if (st.revivedSquareThisTurn === move.from && move.capturedPieceType) {
         socket.emit('game:moveRejected', { reason: 'Sacrificed piece cannot capture this turn.' });

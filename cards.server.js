@@ -4,42 +4,30 @@ import { Chess } from 'chess.js'
 /**
  * รายการการ์ดทั้งหมด (26 cards)
  *  - ถ้าต้องการเพิ่ม/ลด ให้แก้ที่นี่
+ * 'BUFF_EXTRA_MOVE'
+ * 'FORGE'
+ * 'SUMMON_PAWN'
+ * 'SWAP_ALLY'
+ * 'SHIELD'
+ * 'SAFE_ZONE'
+ * 'SACRIFICE'
+ * 'RNG_BLAST'
+ * 'CLEANSE'
  */
 const ALL_CARD_IDS = [
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
-  'BUFF_EXTRA_MOVE',
+  // Attack - 40% (10 cards)
+  'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', // 7
+  'RNG_BLAST', 'RNG_BLAST', 'RNG_BLAST', // 3
 
-  'BUFF_PAWN_RANGE',
-  'BUFF_PAWN_RANGE',
+  // Defense - 30% (8 cards)
+  'SHIELD', 'SHIELD', 'SHIELD', // 3
+  'SAFE_ZONE', 'SAFE_ZONE', // 2
+  'CLEANSE', 'CLEANSE', 'CLEANSE', // 3
 
-  'BUFF_SUMMON_PAWN',
-  'BUFF_SUMMON_PAWN',
-  'BUFF_SUMMON_PAWN',
-
-  'BUFF_SWAP_ALLY',
-  'BUFF_SWAP_ALLY',
-  'BUFF_SWAP_ALLY',
-  'BUFF_SWAP_ALLY',
-
-  'DEF_SHIELD',
-  'DEF_SHIELD',
-  'DEF_SHIELD',
-
-  'DEF_SAFE_ZONE',
-  'DEF_SAFE_ZONE',
-
-  'COUNTER_SACRIFICE',
-  'COUNTER_SACRIFICE',
-
-  'AOE_BLAST',
-  'AOE_BLAST',
-
-  'CLEANSE_BUFFS',
-  'CLEANSE_BUFFS',
-  'CLEANSE_BUFFS',
+  // Special - 30% (8 cards)
+  'SUMMON_PAWN', 'SUMMON_PAWN', // 2
+  'SWAP_ALLY', 'SWAP_ALLY', 'SWAP_ALLY', // 3
+  'SACRIFICE', 'SACRIFICE', 'SACRIFICE', // 3
 ]
 
 const mkUid = () =>
@@ -134,23 +122,9 @@ export function playCardOnServer({
 
   switch (card) {
 
-    case 'BUFF_EXTRA_MOVE': {
-      st.extra[side] += 1
-      st.cardPlayedBy = side
-      st.noKingBy = side
 
-      removeFromHand(st.cards, side, uid)
-      syncHandToSide(roomId, side)
 
-      io.to(roomId).emit('card:update', {
-        extra: st.extra,
-        cardPlayedBy: st.cardPlayedBy,
-        noKingBy: st.noKingBy,
-      })
-      return { ok: true }
-    }
-
-    case 'BUFF_PAWN_RANGE': {
+    case 'FORGE': {
       const sq = payload?.square
       if (!sq) return { ok: false, reason: 'need-target-square' }
 
@@ -176,7 +150,7 @@ export function playCardOnServer({
       return { ok: true }
     }
 
-    case 'BUFF_SUMMON_PAWN': {
+    case 'SUMMON_PAWN': {
       const sq = payload?.square
       if (!sq) return { ok: false, reason: 'need-square' }
 
@@ -207,7 +181,7 @@ export function playCardOnServer({
       return { ok: true }
     }
 
-    case 'BUFF_SWAP_ALLY': {
+    case 'SWAP_ALLY': {
       const a = payload?.a
       const b = payload?.b
       if (!a || !b) return { ok: false, reason: 'need-two-squares' }
@@ -277,7 +251,7 @@ export function playCardOnServer({
     }
 
     // -------- ป้องกัน / Safe zone 3x3 --------
-    case 'DEF_SHIELD': {
+    case 'SHIELD': {
       st.shield = { by: side, square: payload?.square || null }
       st.cardPlayedBy = side
 
@@ -291,7 +265,7 @@ export function playCardOnServer({
       return { ok: true }
     }
 
-    case 'DEF_SAFE_ZONE': {
+    case 'SAFE_ZONE': {
       const sq = payload?.square
       if (!sq) return { ok: false, reason: 'need-square' }
 
@@ -310,7 +284,7 @@ export function playCardOnServer({
     }
 
     // -------- AOE 3×3 ดีเลย์ 1 เทิร์น (ระเบิดหลังจบตาอีกฝั่ง) --------
-    case 'AOE_BLAST': {
+    case 'RNG_BLAST': {
       const sq = payload?.square
       if (!sq) return { ok: false, reason: 'need-square' }
 
@@ -338,7 +312,7 @@ export function playCardOnServer({
     }
 
     // -------- ล้างบัพทั้งหมด --------
-    case 'CLEANSE_BUFFS': {
+    case 'CLEANSE': {
       // ล้างทุกบัพ/สถานะทั้งสองฝั่ง
       st.extra = { w: 0, b: 0 }
       st.shield = { by: null, square: null }
@@ -368,7 +342,7 @@ export function playCardOnServer({
     }
 
     // -------- โต้กลับ --------
-    case 'COUNTER_SACRIFICE': {
+    case 'SACRIFICE': {
       const lc = st.lastCapture
       if (!lc || lc.victim !== side || st.turn !== side) {
         return { ok: false, reason: 'no-recent-capture' }
@@ -467,7 +441,7 @@ export function resolveAoe(roomId, st, io) {
         from: null,
         to: null,
         san: 'AOE',
-        special: 'AOE_BLAST',
+        special: 'RNG_BLAST',
         target: victimSq,
         victimType: victimPiece.type,
         victimColor: victimPiece.color,

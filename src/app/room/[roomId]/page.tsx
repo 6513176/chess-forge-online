@@ -13,14 +13,14 @@ import RulesModal from '@/app/components/RulesModal';
 // ---- Card types ----
 type CardId =
   | 'BUFF_EXTRA_MOVE'
-  | 'DEF_SHIELD'
-  | 'COUNTER_SACRIFICE'
-  | 'BUFF_PAWN_RANGE'
-  | 'BUFF_SUMMON_PAWN'
-  | 'BUFF_SWAP_ALLY'
-  | 'DEF_SAFE_ZONE'
-  | 'AOE_BLAST'
-  | 'CLEANSE_BUFFS';
+  | 'SHIELD'
+  | 'SACRIFICE'
+  | 'FORGE'
+  | 'SUMMON_PAWN'
+  | 'SWAP_ALLY'
+  | 'SAFE_ZONE'
+  | 'RNG_BLAST'
+  | 'CLEANSE';
 
 type Card = {
   id: CardId;
@@ -39,42 +39,42 @@ const CARD_DEFS: Card[] = [
     desc: 'Gain 1 extra move this turn (cannot capture piece)',
   },
   {
-    id: 'DEF_SHIELD',
+    id: 'SHIELD',
     name: 'SHIELD',
     desc: 'Protect chosen piece from being captured for 1 turn',
   },
   {
-    id: 'COUNTER_SACRIFICE',
+    id: 'SACRIFICE',
     name: 'SACRIFICE',
     desc: 'Counter: Revive just-lost piece by sacrificing 1 of your own',
   },
   {
-    id: 'BUFF_PAWN_RANGE',
+    id: 'FORGE',
     name: 'HIT AND RUN',
     desc: 'Attach to any piece permanently. It gains 2 moves per turn (1st move captures naturally, 2nd move only repositions).',
   },
   {
-    id: 'BUFF_SUMMON_PAWN',
+    id: 'SUMMON_PAWN',
     name: 'SUMMON PAWN',
     desc: 'Summon a new pawn on your starting rank (White 2, Black 7)',
   },
   {
-    id: 'BUFF_SWAP_ALLY',
+    id: 'SWAP_ALLY',
     name: 'SWAP',
     desc: 'Swap positions of 2 of your pieces',
   },
   {
-    id: 'DEF_SAFE_ZONE',
+    id: 'SAFE_ZONE',
     name: 'SAFE ZONE',
     desc: 'Create a 3x3 safe zone preventing captures for 1 turn',
   },
   {
-    id: 'AOE_BLAST',
+    id: 'RNG_BLAST',
     name: 'RNG BLAST',
     desc: 'Randomly destroy 1 piece in a 3x3 area after 2 of your turns',
   },
   {
-    id: 'CLEANSE_BUFFS',
+    id: 'CLEANSE',
     name: 'CLEANSE',
     desc: 'Remove effects and buffs from the board',
   },
@@ -630,50 +630,50 @@ export default function RoomPage() {
     }
 
     // การ์ดที่ต้องเลือกเป้าบนบอร์ด
-    if (card.id === 'DEF_SHIELD') {
+    if (card.id === 'SHIELD') {
       setSelectingShield(true);
       setShieldCardUid(card.uid);
       return;
     }
 
-    if (card.id === 'COUNTER_SACRIFICE') {
+    if (card.id === 'SACRIFICE') {
       setSelectingCounterSac(true);
       setCounterCardUid(card.uid);
       return;
     }
 
-    if (card.id === 'BUFF_PAWN_RANGE') {
+    if (card.id === 'FORGE') {
       setSelectingPawnRange(true);
       setPawnRangeCardUid(card.uid);
       return;
     }
 
-    if (card.id === 'BUFF_SUMMON_PAWN') {
+    if (card.id === 'SUMMON_PAWN') {
       setSelectingSummonPawn(true);
       setSummonCardUid(card.uid);
       return;
     }
 
-    if (card.id === 'BUFF_SWAP_ALLY') {
+    if (card.id === 'SWAP_ALLY') {
       setSelectingSwap(true);
       setSwapCardUid(card.uid);
       setSwapFirstSquare(null);
       return;
     }
 
-    if (card.id === 'DEF_SAFE_ZONE') {
+    if (card.id === 'SAFE_ZONE') {
       setSelectingSafeZone(true);
       setSafeZoneCardUid(card.uid);
       return;
     }
 
-    if (card.id === 'AOE_BLAST') {
+    if (card.id === 'RNG_BLAST') {
       setSelectingAoe(true);
       setAoeCardUid(card.uid);
       return;
     }
 
-    // CLEANSE_BUFFS หรือการ์ดไม่ต้องเลือกเป้า (FORGE)
+    // CLEANSE หรือการ์ดไม่ต้องเลือกเป้า (FORGE)
     setPendingTarget({
       cardId: card.id,
       uid: card.uid,
@@ -710,7 +710,7 @@ export default function RoomPage() {
     }
 
     setPendingTarget({
-      cardId: 'DEF_SHIELD',
+      cardId: 'SHIELD',
       uid: shieldCardUid,
       payload: { square },
       label: square
@@ -727,14 +727,14 @@ export default function RoomPage() {
     }
 
     setPendingTarget({
-      cardId: 'COUNTER_SACRIFICE',
+      cardId: 'SACRIFICE',
       uid: counterCardUid,
       payload: { sacrificeSquare: square },
       label: square
     });
   }
 
-  // BUFF_PAWN_RANGE (HIT AND RUN): เลือกหมากของเราตัวไหนก็ได้
+  // FORGE (HIT AND RUN): เลือกหมากของเราตัวไหนก็ได้
   function handleSquareClickForPawnRange(square: Square) {
     if (!selectingPawnRange || !pawnRangeCardUid) return;
     const p: any = gameRef.current.get(square as any);
@@ -744,14 +744,14 @@ export default function RoomPage() {
     }
 
     setPendingTarget({
-      cardId: 'BUFF_PAWN_RANGE',
+      cardId: 'FORGE',
       uid: pawnRangeCardUid,
       payload: { square },
       label: square
     });
   }
 
-  // BUFF_SUMMON_PAWN: เลือกช่องว่างบนแถว 2(ขาว) / 7(ดำ)
+  // SUMMON_PAWN: เลือกช่องว่างบนแถว 2(ขาว) / 7(ดำ)
   function handleSquareClickForSummon(square: Square) {
     if (!selectingSummonPawn || !summonCardUid) return;
 
@@ -772,14 +772,14 @@ export default function RoomPage() {
     }
 
     setPendingTarget({
-      cardId: 'BUFF_SUMMON_PAWN',
+      cardId: 'SUMMON_PAWN',
       uid: summonCardUid,
       payload: { square },
       label: square
     });
   }
 
-  // BUFF_SWAP_ALLY: Select 2 allied pieces
+  // SWAP_ALLY: Select 2 allied pieces
   function handleSquareClickForSwap(square: Square) {
     if (!selectingSwap || !swapCardUid) return;
 
@@ -801,31 +801,31 @@ export default function RoomPage() {
     }
 
     setPendingTarget({
-      cardId: 'BUFF_SWAP_ALLY',
+      cardId: 'SWAP_ALLY',
       uid: swapCardUid,
       payload: { a: swapFirstSquare, b: square },
       label: `${swapFirstSquare} & ${square}`
     });
   }
 
-  // DEF_SAFE_ZONE 3×3: เลือก center ช่องเดียว
+  // SAFE_ZONE 3×3: เลือก center ช่องเดียว
   function handleSquareClickForSafeZone(square: Square) {
     if (!selectingSafeZone || !safeZoneCardUid) return;
 
     setPendingTarget({
-      cardId: 'DEF_SAFE_ZONE',
+      cardId: 'SAFE_ZONE',
       uid: safeZoneCardUid,
       payload: { square },
       label: square
     });
   }
 
-  // AOE_BLAST 3×3: เลือก center ช่องเดียว
+  // RNG_BLAST 3×3: เลือก center ช่องเดียว
   function handleSquareClickForAoe(square: Square) {
     if (!selectingAoe || !aoeCardUid) return;
 
     setPendingTarget({
-      cardId: 'AOE_BLAST',
+      cardId: 'RNG_BLAST',
       uid: aoeCardUid,
       payload: { square },
       label: square
@@ -1246,9 +1246,9 @@ export default function RoomPage() {
               const playable = !isOver && !!meSide && turn === meSide && cardPlayedBy !== meSide;
               const isLocked = lockedCardId === c.uid;
               let tKey = 'indigo';
-              if (['BUFF_EXTRA_MOVE', 'BUFF_PAWN_RANGE', 'AOE_BLAST'].includes(c.id)) tKey = 'rose';
-              else if (['DEF_SHIELD', 'DEF_SAFE_ZONE', 'CLEANSE_BUFFS'].includes(c.id)) tKey = 'sky';
-              else if (['COUNTER_SACRIFICE', 'BUFF_SWAP_ALLY', 'BUFF_SUMMON_PAWN'].includes(c.id)) tKey = 'amber';
+              if (['BUFF_EXTRA_MOVE', 'FORGE', 'RNG_BLAST'].includes(c.id)) tKey = 'rose';
+              else if (['SHIELD', 'SAFE_ZONE', 'CLEANSE'].includes(c.id)) tKey = 'sky';
+              else if (['SACRIFICE', 'SWAP_ALLY', 'SUMMON_PAWN'].includes(c.id)) tKey = 'amber';
 
               const themes: Record<string, any> = {
                 rose: {
