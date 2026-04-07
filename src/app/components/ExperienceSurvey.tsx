@@ -65,7 +65,7 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
 
   let allCurrentAnswered = false;
   if (step === 0) {
-    allCurrentAnswered = !!(answers.name && answers.age && answers.boardGameExp && answers.chessExp);
+    allCurrentAnswered = !!(answers.firstName && answers.lastName && answers.age && answers.boardGameExp && answers.chessExp);
   } else {
     allCurrentAnswered = currentQuestions.every((q) => answers[q.id] !== undefined);
   }
@@ -121,62 +121,75 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
                 Please answer a few questions about yourself before proceeding to the game experience survey.
               </div>
 
-              <div className="bg-white/5 p-5 rounded-xl border border-white/5">
-                <label className="block text-white mb-2 font-medium">ชื่อ-นามสกุล (Name - Surname)</label>
-                <input
-                  type="text"
-                  value={answers.name || ''}
-                  onChange={(e) => handleSelect('name', e.target.value)}
-                  placeholder="Enter your name"
-                  className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white/5 p-5 rounded-xl border border-white/5">
+                  <label className="block text-white mb-2 font-medium">First Name</label>
+                  <input
+                    type="text"
+                    value={answers.firstName || ''}
+                    onChange={(e) => handleSelect('firstName', e.target.value)}
+                    placeholder="Enter your first name"
+                    className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+
+                <div className="bg-white/5 p-5 rounded-xl border border-white/5">
+                  <label className="block text-white mb-2 font-medium">Last Name</label>
+                  <input
+                    type="text"
+                    value={answers.lastName || ''}
+                    onChange={(e) => handleSelect('lastName', e.target.value)}
+                    placeholder="Enter your last name"
+                    className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
               </div>
 
               <div className="bg-white/5 p-5 rounded-xl border border-white/5">
-                <label className="block text-white mb-2 font-medium">อายุ (Age)</label>
+                <label className="block text-white mb-2 font-medium">Age</label>
                 <select
                   value={answers.age || ''}
                   onChange={(e) => handleSelect('age', e.target.value)}
                   className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
                 >
                   <option value="" disabled>Select option</option>
-                  <option value="<18">ต่ำกว่า 18 ปี (Under 18)</option>
-                  <option value="18-24">18–24 ปี (18-24)</option>
-                  <option value="25-34">25–34 ปี (25-34)</option>
-                  <option value="35-44">35–44 ปี (35-44)</option>
-                  <option value=">=45">45 ปีขึ้นไป (45 and older)</option>
+                  <option value="<18">Under 18</option>
+                  <option value="18-24">18-24 years</option>
+                  <option value="25-34">25-34 years</option>
+                  <option value="35-44">35-44 years</option>
+                  <option value=">=45">45 years and older</option>
                 </select>
               </div>
 
               <div className="bg-white/5 p-5 rounded-xl border border-white/5">
-                <label className="block text-white mb-2 font-medium">เคยเล่นบอร์ดเกมมานานแค่ไหน (How long have you played board games?)</label>
+                <label className="block text-white mb-2 font-medium">How long have you played board games?</label>
                 <select
                   value={answers.boardGameExp || ''}
                   onChange={(e) => handleSelect('boardGameExp', e.target.value)}
                   className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
                 >
                   <option value="" disabled>Select option</option>
-                  <option value="never">ไม่เคยเล่นเลย (Never played)</option>
-                  <option value="<1">น้อยกว่า 1 ปี (Less than 1 year)</option>
-                  <option value="1-3">1-3 ปี (1-3 years)</option>
-                  <option value="3-5">3-5 ปี (3-5 years)</option>
-                  <option value=">5">มากกว่า 5 ปี (More than 5 years)</option>
+                  <option value="never">Never played</option>
+                  <option value="<1">Less than 1 year</option>
+                  <option value="1-3">1-3 years</option>
+                  <option value="3-5">3-5 years</option>
+                  <option value=">5">More than 5 years</option>
                 </select>
               </div>
 
               <div className="bg-white/5 p-5 rounded-xl border border-white/5">
-                <label className="block text-white mb-2 font-medium">เล่นหมากรุกมานานแค่ไหน (How long have you played chess?)</label>
+                <label className="block text-white mb-2 font-medium">How long have you played chess?</label>
                 <select
                   value={answers.chessExp || ''}
                   onChange={(e) => handleSelect('chessExp', e.target.value)}
                   className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
                 >
                   <option value="" disabled>Select option</option>
-                  <option value="never">ไม่เคยเล่นเลย (Never played)</option>
-                  <option value="<1">น้อยกว่า 1 ปี (Less than 1 year)</option>
-                  <option value="1-3">1-3 ปี (1-3 years)</option>
-                  <option value="3-5">3-5 ปี (3-5 years)</option>
-                  <option value=">5">มากกว่า 5 ปี (More than 5 years)</option>
+                  <option value="never">Never played</option>
+                  <option value="<1">Less than 1 year</option>
+                  <option value="1-3">1-3 years</option>
+                  <option value="3-5">3-5 years</option>
+                  <option value=">5">More than 5 years</option>
                 </select>
               </div>
             </div>

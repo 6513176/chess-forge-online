@@ -393,8 +393,6 @@ io.on('connection', (socket) => {
           if (st.shield.by && st.turn === st.shield.by) st.shield = { by: null, square: null };
           if (st.safeZone.by && st.turn === st.safeZone.by) st.safeZone = { by: null, square: null };
 
-          if (st.safeZone.by && st.turn === st.safeZone.by) st.safeZone = { by: null, square: null };
-
           if (st.clock && !st.gameOver) {
             const now = Date.now();
             if (st.clock.running && st.clock.lastTickAt) {
@@ -545,6 +543,9 @@ io.on('connection', (socket) => {
       const hadExtra = st.extra[side] > 0;
       const pieceHasRangeBuff = !!(st.pawnRange && st.pawnRange[move.from]);
 
+      // ระบุว่าตานี้เป็นการเดินครั้งที่สองของ Hit And Run หรือไม่
+      const isSecondHitAndRunMove = st.hitAndRunActiveSquare === move.from;
+
       // ให้สิทธิ์เดินเบี้ยอีกครั้งเฉพาะเกมที่ยังไม่ได้ใช้โควต้า Range Buff ในเทิร์นนี้
       const usedRangeBuff = pieceHasRangeBuff && !st.hitAndRunActiveSquare;
 
@@ -611,13 +612,17 @@ io.on('connection', (socket) => {
       // ถ้าเหยื่อเป็นคนเดินแล้ว → หมดสิทธิ์โต้กลับในตานั้น
       if (st.lastCapture && side === st.lastCapture.victim) st.lastCapture = null;
 
-      //  เก็บ FEN ล่าสุดไว้ที่ห้อง
+      // เก็บ FEN ล่าสุดไว้ที่ห้อง
       st.fen = fenAfter;
 
-      // ถ้าช่องต้นทางมีบัพ pawnRange → ย้ายบัพไปช่องปลาย
+      // ถ้าช่องต้นทางมีบัพ pawnRange → ย้ายบัพ หรือ ลบทิ้งถ้าเป็นการใช้ Hit & Run เดินครั้งสุดท้าย
       if (st.pawnRange && st.pawnRange[move.from]) {
-        st.pawnRange[move.to] = st.pawnRange[move.from];
-        delete st.pawnRange[move.from];
+        if (isSecondHitAndRunMove) {
+          delete st.pawnRange[move.from]; // จบมูฟที่สอง ลบบัพทิ้งออกไปเลย
+        } else {
+          st.pawnRange[move.to] = st.pawnRange[move.from];
+          delete st.pawnRange[move.from];
+        }
         io.to(roomId).emit('card:update', { pawnRange: st.pawnRange });
       }
 
