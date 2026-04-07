@@ -605,6 +605,12 @@ io.on('connection', (socket) => {
         return cb?.({ ok: false, reason: 'shielded' });
       }
 
+      // ❌ ห้ามกิน King เด็ดขาด (เกิดจาก Forge sprint hack ที่ bypass chess.js check limitation)
+      if (move.capturedPieceType === 'k') {
+        socket.emit('game:moveRejected', { reason: 'Cannot capture the King!' });
+        return cb?.({ ok: false, reason: 'king-capture-blocked' });
+      }
+
       // ย้ายโล่ตาม
       if (st.shield.by === side && st.shield.square === move.from) {
         st.shield.square = move.to;
@@ -762,17 +768,21 @@ io.on('connection', (socket) => {
         }
       }
 
-      const evalRes = evaluateGameState(fenAfter);
-      if (evalRes.over) {
-        st.gameOver = true;
-        st.result = evalRes.payload;
-        if (st.clock) st.clock.running = null; // หยุดนาฬิกาเมื่อเกมจบ
+      try {
+        const evalRes = evaluateGameState(fenAfter);
+        if (evalRes.over) {
+          st.gameOver = true;
+          st.result = evalRes.payload;
+          if (st.clock) st.clock.running = null; // หยุดนาฬิกาเมื่อเกมจบ
 
-        io.to(roomId).emit('game:over', st.result);
-      } else if (evalRes.payload.type === 'check') {
-        io.to(roomId).emit('game:check', {
-          sideInCheck: evalRes.payload.sideInCheck,
-        });
+          io.to(roomId).emit('game:over', st.result);
+        } else if (evalRes.payload.type === 'check') {
+          io.to(roomId).emit('game:check', {
+            sideInCheck: evalRes.payload.sideInCheck,
+          });
+        }
+      } catch (evalErr) {
+        console.error('[game:move] evaluateGameState error:', evalErr);
       }
 
       cb?.({ ok: true });

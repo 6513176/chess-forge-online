@@ -332,7 +332,12 @@ export default function RoomPage() {
 
       const onGameMove = ({ fenAfter, currentTurn }: any) => {
         // อัปเดตกระดานจาก server -> โหลด FEN ใหม่
-        gameRef.current.load(fenAfter);
+        try {
+          gameRef.current.load(fenAfter);
+        } catch {
+          // If load fails (corrupt FEN), create a fresh instance
+          try { gameRef.current = new Chess(fenAfter); } catch { /* ignore */ }
+        }
         setFen(gameRef.current.fen());
         if (currentTurn) setTurn(currentTurn);
         setCheckSide(null);
