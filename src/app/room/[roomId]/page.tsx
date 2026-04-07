@@ -143,6 +143,7 @@ export default function RoomPage() {
     null
   );
   const [hasSubmittedSurvey, setHasSubmittedSurvey] = useState(false);
+  const [showSurvey, setShowSurvey] = useState(false);
   const [connectionTimeMs, setConnectionTimeMs] = useState(0);
   const [pings, setPings] = useState<number[]>([]);
   const [cardsPlayedLog, setCardsPlayedLog] = useState<string[]>([]);
@@ -1532,50 +1533,63 @@ export default function RoomPage() {
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <div className="text-sm mb-1">Readiness:</div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${restartVotes.has('w') ? 'bg-emerald-600' : 'bg-gray-700'
-                      }`}
-                  >
-                    White {restartVotes.has('w') ? '✔' : '…'}
-                  </span>
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${restartVotes.has('b') ? 'bg-emerald-600' : 'bg-gray-700'
-                      }`}
-                  >
-                    Black {restartVotes.has('b') ? '✔' : '…'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {restartCounting ? (
-                  <div className="px-3 py-1.5 rounded bg-amber-600 text-white">
-                    Restart in {remain}s
-                  </div>
-                ) : (
+              {!showSurvey && !hasSubmittedSurvey ? (
+                <div className="flex-1 flex justify-center mt-2">
                   <button
-                    onClick={voteRestart}
-                    className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                    disabled={!meSide || restartVotes.has(meSide)}
+                    onClick={() => setShowSurvey(true)}
+                    className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold text-lg shadow-lg hover:scale-[1.03] transition-transform animate-pulse"
                   >
-                    {!meSide || !restartVotes.has(meSide)
-                      ? 'Ready to Restart'
-                      : 'Waiting for opponent...'}
+                    Next ➡️
                   </button>
-                )}
-                <button
-                  onClick={() => window.location.href = '/'}
-                  className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 font-bold transition shadow-sm border border-slate-600 text-white ml-2"
-                >
-                  Back to Home
-                </button>
-              </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1">
+                    <div className="text-sm mb-1">Readiness:</div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-1 rounded text-xs ${restartVotes.has('w') ? 'bg-emerald-600' : 'bg-gray-700'
+                          }`}
+                      >
+                        White {restartVotes.has('w') ? '✔' : '…'}
+                      </span>
+                      <span
+                        className={`px-2 py-1 rounded text-xs ${restartVotes.has('b') ? 'bg-emerald-600' : 'bg-gray-700'
+                          }`}
+                      >
+                        Black {restartVotes.has('b') ? '✔' : '…'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {restartCounting ? (
+                      <div className="px-3 py-1.5 rounded bg-amber-600 text-white">
+                        Restart in {remain}s
+                      </div>
+                    ) : (
+                      <button
+                        onClick={voteRestart}
+                        className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                        disabled={!meSide || restartVotes.has(meSide)}
+                      >
+                        {!meSide || !restartVotes.has(meSide)
+                          ? 'Ready to Restart'
+                          : 'Waiting for opponent...'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => window.location.href = '/'}
+                      className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 font-bold transition shadow-sm border border-slate-600 text-white ml-2"
+                    >
+                      Back to Home
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
-            {!restartCounting && (
+            {!restartCounting && hasSubmittedSurvey && (
               <div className="text-xs opacity-70 mt-2 text-center"></div>
             )}
           </div>
@@ -1583,7 +1597,7 @@ export default function RoomPage() {
       )}
 
       <ExperienceSurvey
-        isOpen={isOver && !hasSubmittedSurvey}
+        isOpen={isOver && showSurvey && !hasSubmittedSurvey}
         onSubmit={(answers) => {
           const timeL = meSide === 'w' ? timeLeft.w : timeLeft.b;
           const uid = user?.displayName || user?.uid || 'guest';
