@@ -1687,6 +1687,7 @@ export default function RoomPage() {
             maxPing: pings.length > 0 ? Math.max(...pings) : 0,
             surveyAnswers: null
           });
+          setHasSubmittedSurvey(true);
         }}
       />
 
