@@ -518,37 +518,46 @@ export default function RoomPage() {
     if (!meSide || turn !== meSide) return false;
     if (anySelecting) return false;
 
+    // Save the pristine FEN so we can rollback if the move fails
+    const pristineFen = gameRef.current.fen();
+
     // force side to move
-    let fenNow = gameRef.current.fen();
-    const parts = fenNow.split(' ');
+    const parts = pristineFen.split(' ');
     if (parts[1] !== meSide) {
-      // We must bypass chess.js check limitation: if opponent is in check, we can't manually set turn to our side.
-      // So we temporarily lift our sprinting piece, change the turn, and drop it back!
+      // Bypass chess.js check limitation: if opponent is in check after sprint move 1,
+      // chess.js refuses to accept a FEN where it's our turn. Temporarily lift the
+      // sprinting piece (the one causing check), flip turn, then place it back.
       let liftedPiece: any = null;
-      let liftSquare: any = hitAndRunActiveSquare;
+      const liftSquare: any = hitAndRunActiveSquare;
       if (liftSquare) {
-         liftedPiece = gameRef.current.remove(liftSquare);
+        liftedPiece = gameRef.current.remove(liftSquare);
       }
-      
+
       const unthreatenedFen = gameRef.current.fen();
-      const p = unthreatenedFen.split(' ');
-      p[1] = meSide;
-      const adjustedFen = p.join(' ');
-      
+      const p2 = unthreatenedFen.split(' ');
+      p2[1] = meSide;
+      const adjustedFen = p2.join(' ');
+
       try {
         const temp = new Chess(adjustedFen);
         if (liftedPiece && liftSquare) {
-           temp.put(liftedPiece, liftSquare); 
+          temp.put(liftedPiece, liftSquare);
         }
         gameRef.current = temp;
       } catch {
-        // Fallback
+        // Restore pristine state on failure
+        gameRef.current = new Chess(pristineFen);
+        return false;
       }
     }
 
     const game = gameRef.current;
     const p = game.get(from as any);
-    if (!p || p.color !== meSide) return false;
+    if (!p || p.color !== meSide) {
+      // Restore pristine state
+      gameRef.current = new Chess(pristineFen);
+      return false;
+    }
 
     const willPromote =
       p.type === 'p' &&
@@ -561,12 +570,17 @@ export default function RoomPage() {
     try {
       mv = game.move(moveObj);
     } catch {
+      // Restore pristine state – the manipulated game is no good
+      gameRef.current = new Chess(pristineFen);
       return false;
     }
-    if (!mv) return false;
+    if (!mv) {
+      // Restore pristine state – move illegal according to chess.js
+      gameRef.current = new Chess(pristineFen);
+      return false;
+    }
 
     const fenAfter = game.fen();
-
 
     setFen(fenAfter);
 
@@ -588,8 +602,9 @@ export default function RoomPage() {
       },
       (ack: any) => {
         if (!ack || !ack.ok) {
-          game.undo();
-          setFen(game.fen());
+          // Restore from pristine FEN rather than undo (which operates on corrupted state)
+          gameRef.current = new Chess(pristineFen);
+          setFen(pristineFen);
         }
       }
     );
@@ -1016,39 +1031,41 @@ export default function RoomPage() {
   function computeLegalMovesFrom(square: Square | null) {
     if (!square) return {};
     try {
-      // Force side to move if we are in Extra Move phase
-      if (meSide) {
-        let fenNow = gameRef.current.fen();
-        const parts = fenNow.split(' ');
-        if (parts[1] !== meSide) {
-          let liftedPiece: any = null;
-          let liftSquare: any = hitAndRunActiveSquare;
-          if (liftSquare) {
-             liftedPiece = gameRef.current.remove(liftSquare as any);
-          }
-          
-          const unthreatenedFen = gameRef.current.fen();
-          const p = unthreatenedFen.split(' ');
-          p[1] = meSide;
-          const adjustedFen = p.join(' ');
-          
-          try {
-            const temp = new Chess(adjustedFen);
-            if (liftedPiece && liftSquare) {
-               temp.put(liftedPiece, liftSquare as any); 
-            }
-            gameRef.current = temp;
-          } catch {
-            // Fallback
-          }
+      // Use a TEMPORARY instance so we never corrupt gameRef.current
+      let tempGame: Chess;
+      const fenNow = gameRef.current.fen();
+      const parts = fenNow.split(' ');
+
+      if (meSide && parts[1] !== meSide) {
+        // Need to force turn. Use the piece-lifting trick on a clone.
+        const clone = new Chess(fenNow);
+        let liftedPiece: any = null;
+        const liftSquare: any = hitAndRunActiveSquare;
+        if (liftSquare) {
+          liftedPiece = clone.remove(liftSquare as any);
         }
+
+        const cloneFen = clone.fen();
+        const p = cloneFen.split(' ');
+        p[1] = meSide;
+        const adjustedFen = p.join(' ');
+
+        try {
+          tempGame = new Chess(adjustedFen);
+          if (liftedPiece && liftSquare) {
+            tempGame.put(liftedPiece, liftSquare as any);
+          }
+        } catch {
+          return {}; // Can't resolve, no legal moves to show
+        }
+      } else {
+        tempGame = new Chess(fenNow);
       }
 
-      // บอก TS ว่า square เป็น Square
-      const moves = gameRef.current.moves({ square: square as Square, verbose: true }) as any[] | string[];
+      const moves = tempGame.moves({ square: square as Square, verbose: true }) as any[];
       const out: Record<string, boolean> = {};
       if (!moves) return out;
-      for (const m of moves as any[]) {
+      for (const m of moves) {
         if (m && m.to && m.captured && (square as string) === revivedSquareThisTurn) continue;
         if (m && m.to) out[m.to] = true;
       }
