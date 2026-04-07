@@ -245,7 +245,7 @@ export default function RoomPage() {
   const [deckCount, setDeckCount] = useState<number | null>(null);
   const [graveyardCount, setGraveyardCount] = useState<number | null>(null);
   const [handCounts, setHandCounts] = useState<{ w: number, b: number } | null>(null);
-  const [disconnects, setDisconnects] = useState<{color: string, expireAt: number}[]>([]);
+  const [disconnects, setDisconnects] = useState<{ color: string, expireAt: number }[]>([]);
 
   // chat
   const [chat, setChat] = useState<string[]>([]);
@@ -1309,7 +1309,7 @@ export default function RoomPage() {
         {/* CARDS */}
         <div className="flex-shrink-0">
           {hitAndRunActiveSquare && meSide === turn && (
-            <button 
+            <button
               onClick={() => {
                 if (window.confirm('Skip 2nd move and end turn?')) {
                   socket.emit('card:cancelForgeSprint', { roomId }, (res: any) => {
@@ -1520,7 +1520,11 @@ export default function RoomPage() {
                   if (result.type === 'timeout') return 'Time Out';
                   if (result.type === 'resign') {
                     const iWin = meSide && result.winner === meSide;
-                    return iWin ? 'You Win! (Opponent Resigned 🏳️)' : 'You Resigned 😔';
+                    return iWin ? 'You Win! (Opponent Resigned)' : 'You Resigned';
+                  }
+                  if ((result as any).reason === 'disconnect') {
+                    const iWin = meSide && result.winner === meSide;
+                    return iWin ? 'You Win! (Opponent Abandoned)' : 'You Abandoned';
                   }
                   return 'Game Over';
                 })()}
