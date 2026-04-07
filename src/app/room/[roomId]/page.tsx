@@ -12,7 +12,6 @@ import RulesModal from '@/app/components/RulesModal';
 
 // ---- Card types ----
 type CardId =
-  | 'BUFF_EXTRA_MOVE'
   | 'SHIELD'
   | 'SACRIFICE'
   | 'FORGE'
@@ -34,9 +33,9 @@ type CardInstance = Card & { uid: string };
 // นิยามการ์ดทั้งหมด (ฝั่ง client แค่ใช้เพื่อแสดงชื่อ/คำอธิบาย)
 const CARD_DEFS: Card[] = [
   {
-    id: 'BUFF_EXTRA_MOVE',
+    id: 'FORGE',
     name: 'FORGE',
-    desc: 'Gain 1 extra move this turn (cannot capture piece)',
+    desc: 'Attach to any piece permanently. Activate before moving to gain a double move this turn (both moves can capture). Consumed upon use.',
   },
   {
     id: 'SHIELD',
@@ -47,11 +46,6 @@ const CARD_DEFS: Card[] = [
     id: 'SACRIFICE',
     name: 'SACRIFICE',
     desc: 'Counter: Revive just-lost piece by sacrificing 1 of your own',
-  },
-  {
-    id: 'FORGE',
-    name: 'HIT AND RUN',
-    desc: 'Attach to any piece permanently. It gains 2 moves per turn (1st move captures naturally, 2nd move only repositions).',
   },
   {
     id: 'SUMMON_PAWN',
@@ -205,6 +199,7 @@ export default function RoomPage() {
   );
   const [pawnRange, setPawnRange] = useState<Record<string, boolean>>({}); // { square: true }
   const [hitAndRunActiveSquare, setHitAndRunActiveSquare] = useState<string | null>(null);
+  const [activeForgeSprintSq, setActiveForgeSprintSq] = useState<string | null>(null);
   const [revivedSquareThisTurn, setRevivedSquareThisTurn] = useState<string | null>(null);
   const [aoe, setAoe] = useState<{ by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null>(
     null
@@ -296,6 +291,7 @@ export default function RoomPage() {
       if (res.safeZone) setSafeZone(res.safeZone);
       if (res.pawnRange) setPawnRange(res.pawnRange);
       if (res.hitAndRunActiveSquare !== undefined) setHitAndRunActiveSquare(res.hitAndRunActiveSquare);
+      if (res.activeForgeSprintSq !== undefined) setActiveForgeSprintSq(res.activeForgeSprintSq);
       if (res.revivedSquareThisTurn !== undefined) setRevivedSquareThisTurn(res.revivedSquareThisTurn);
       if (res.aoe) setAoe(res.aoe);
       if (res.cardPlayedBy !== undefined) setCardPlayedBy(res.cardPlayedBy);
@@ -321,6 +317,7 @@ export default function RoomPage() {
         if (data.safeZone) setSafeZone(data.safeZone);
         if (data.pawnRange) setPawnRange(data.pawnRange);
         if (data.hitAndRunActiveSquare !== undefined) setHitAndRunActiveSquare(data.hitAndRunActiveSquare);
+        if (data.activeForgeSprintSq !== undefined) setActiveForgeSprintSq(data.activeForgeSprintSq);
         if (data.revivedSquareThisTurn !== undefined) setRevivedSquareThisTurn(data.revivedSquareThisTurn);
         if (data.aoe !== undefined) setAoe(data.aoe || null);
         if (data.cardPlayedBy !== undefined) setCardPlayedBy(data.cardPlayedBy);
@@ -916,22 +913,26 @@ export default function RoomPage() {
       safeZone: { by: 'w' | 'b' | null; square: string | null };
       pawnRange: Record<string, any>;
       hitAndRunActiveSquare: string | null; revivedSquareThisTurn: string | null;
+      activeForgeSprintSq?: string | null;
       aoe: { by: 'w' | 'b' | null; center: string | null; remaining?: number | null } | null;
     }
   ): string[] {
     if (!sq) return [];
     const buffs: string[] = [];
-    const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare, revivedSquareThisTurn } = opts;
+    const { shield, safeZone, pawnRange, aoe, hitAndRunActiveSquare, activeForgeSprintSq, revivedSquareThisTurn } = opts;
 
     if (shield.square === sq) {
       buffs.push('Shield: Immune to capture for 1 turn');
     }
 
     if (pawnRange[sq]) {
-      buffs.push('Hit and Run: Move twice (2nd move cannot capture)');
+      buffs.push('Forge: Can activate to move twice');
+    }
+    if (activeForgeSprintSq === sq) {
+      buffs.push('Forge Activated! Will sprint on next move');
     }
     if (hitAndRunActiveSquare === sq) {
-      buffs.push('Moving 2nd time (Cannot capture/move others)');
+      buffs.push('Moving 2nd time (Sprint active)');
     }
     if (revivedSquareThisTurn === sq) {
       buffs.push('Just Revived (Cannot capture this turn)');
@@ -1222,7 +1223,7 @@ export default function RoomPage() {
                     shield,
                     safeZone,
                     pawnRange,
-                    hitAndRunActiveSquare, revivedSquareThisTurn,
+                    hitAndRunActiveSquare, activeForgeSprintSq, revivedSquareThisTurn,
                     aoe,
                   });
                   if (!buffs.length) return 'No buffs';

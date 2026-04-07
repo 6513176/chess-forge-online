@@ -434,6 +434,33 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('card:activateForge', ({ roomId, square }, cb) => {
+    try {
+      const st = rooms.get(roomId);
+      if (!st) return cb?.({ ok: false, reason: 'no-room' });
+      if (st.gameOver) return cb?.({ ok: false, reason: 'game-over' });
+      if (st.players.size < 2) return cb?.({ ok: false, reason: 'waiting-for-opponent' });
+
+      const side = st.players.get(socket.id);
+      if (st.turn !== side) return cb?.({ ok: false, reason: 'not-your-turn' });
+
+      if (!st.pawnRange || !st.pawnRange[square]) {
+        return cb?.({ ok: false, reason: 'no-forge-buff' });
+      }
+
+      if (st.hitAndRunActiveSquare) {
+        return cb?.({ ok: false, reason: 'already-sprinting' });
+      }
+
+      st.activeForgeSprintSq = square;
+      io.to(roomId).emit('card:update', { activeForgeSprintSq: st.activeForgeSprintSq });
+      cb?.({ ok: true });
+    } catch(err) {
+      console.error('[card:activateForge] error:', err);
+      cb?.({ ok: false, reason: 'server-error' });
+    }
+  });
+
   // ---------- moves ----------
   socket.on('game:move', ({ roomId, move, fenBefore, fenAfter, by, capturedSquare }, cb) => {
     try {
@@ -539,8 +566,8 @@ io.on('connection', (socket) => {
       // ระบุว่าตานี้เป็นการเดินครั้งที่สองของ Hit And Run หรือไม่
       const isSecondHitAndRunMove = st.hitAndRunActiveSquare === move.from;
 
-      // ให้สิทธิ์เดินเบี้ยอีกครั้งเฉพาะเกมที่ยังไม่ได้ใช้โควต้า Range Buff ในเทิร์นนี้
-      const usedRangeBuff = pieceHasRangeBuff && !st.hitAndRunActiveSquare;
+      // ให้สิทธิ์เดินเบี้ยอีกครั้งประเมินจากบัพ (ต้องถูกกดใช้งานและตรงตัว)
+      const usedRangeBuff = pieceHasRangeBuff && !st.hitAndRunActiveSquare && st.activeForgeSprintSq === move.from;
 
       if (hadExtra || usedRangeBuff) {
         // ✅ ตานี้ยังเป็นฝั่งเดิม (ได้เดินต่ออีก 1 ครั้ง)
@@ -552,19 +579,25 @@ io.on('connection', (socket) => {
             noKingBy: st.noKingBy,
           });
         } else if (usedRangeBuff) {
-          st.hitAndRunActiveSquare = move.to; io.to(roomId).emit('card:update', { hitAndRunActiveSquare: st.hitAndRunActiveSquare });
+          st.hitAndRunActiveSquare = move.to; 
+          st.activeForgeSprintSq = null;
+          io.to(roomId).emit('card:update', { hitAndRunActiveSquare: st.hitAndRunActiveSquare, activeForgeSprintSq: null });
         }
       } else {
         // เปลี่ยนเทิร์นตามปกติ
         st.turn = opp(st.turn);
         st.cardPlayedBy = null;
         st.noKingBy = null;
-        st.hitAndRunActiveSquare = null; st.revivedSquareThisTurn = null;
+        st.hitAndRunActiveSquare = null; 
+        st.activeForgeSprintSq = null;
+        st.revivedSquareThisTurn = null;
         st.isExtraMovePhase[side] = false;
         io.to(roomId).emit('card:update', {
           cardPlayedBy: st.cardPlayedBy,
           noKingBy: st.noKingBy,
-          hitAndRunActiveSquare: null, revivedSquareThisTurn: null,
+          hitAndRunActiveSquare: null, 
+          activeForgeSprintSq: null,
+          revivedSquareThisTurn: null,
         });
 
         // โล่หมดอายุเมื่อเทิร์นวนกลับมาหาผู้ลงโล่
@@ -613,6 +646,7 @@ io.on('connection', (socket) => {
         if (isSecondHitAndRunMove) {
           delete st.pawnRange[move.from]; // จบมูฟที่สอง ลบบัพทิ้งออกไปเลย
         } else {
+          // ถ้าไม่ได้กดสปรินต์ ให้ขยับบัพตามหมากไปเรื่อยๆ (ขยับธรรมดา)
           st.pawnRange[move.to] = st.pawnRange[move.from];
           delete st.pawnRange[move.from];
         }

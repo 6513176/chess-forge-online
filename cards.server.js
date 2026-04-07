@@ -16,18 +16,18 @@ import { Chess } from 'chess.js'
  */
 const ALL_CARD_IDS = [
   // Attack - 40% (10 cards)
-  'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', // 7
-  'RNG_BLAST', 'RNG_BLAST', 'RNG_BLAST', // 3
+  'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', 'FORGE', // 6
+  'RNG_BLAST', 'RNG_BLAST', 'RNG_BLAST', 'RNG_BLAST', // 4
 
   // Defense - 30% (8 cards)
   'SHIELD', 'SHIELD', 'SHIELD', // 3
-  'SAFE_ZONE', 'SAFE_ZONE', // 2
-  'CLEANSE', 'CLEANSE', 'CLEANSE', // 3
+  'SAFE_ZONE', 'SAFE_ZONE', 'SAFE_ZONE', // 3
+  'CLEANSE', 'CLEANSE', // 2
 
   // Special - 30% (8 cards)
-  'SUMMON_PAWN', 'SUMMON_PAWN', // 2
+  'SUMMON_PAWN', 'SUMMON_PAWN', 'SUMMON_PAWN', // 3
   'SWAP_ALLY', 'SWAP_ALLY', 'SWAP_ALLY', // 3
-  'SACRIFICE', 'SACRIFICE', 'SACRIFICE', // 3
+  'SACRIFICE', 'SACRIFICE', // 2
 ]
 
 const mkUid = () =>
