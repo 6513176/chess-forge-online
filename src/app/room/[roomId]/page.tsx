@@ -70,7 +70,7 @@ const CARD_DEFS: Card[] = [
   {
     id: 'CLEANSE',
     name: 'CLEANSE',
-    desc: 'Remove effects and buffs from the board',
+    desc: 'Select a square to remove any buffs, debuffs, or environmental zones affecting it',
   },
 ];
 
@@ -237,6 +237,10 @@ export default function RoomPage() {
 
   const [selectingAoe, setSelectingAoe] = useState(false);
   const [aoeCardUid, setAoeCardUid] = useState<string | null>(null);
+
+  const [selectingCleanse, setSelectingCleanse] = useState(false);
+  const [cleanseCardUid, setCleanseCardUid] = useState<string | null>(null);
+
   const [deckCount, setDeckCount] = useState<number | null>(null);
   const [graveyardCount, setGraveyardCount] = useState<number | null>(null);
   const [handCounts, setHandCounts] = useState<{ w: number, b: number } | null>(null);
@@ -505,6 +509,7 @@ export default function RoomPage() {
     selectingSummonPawn ||
     selectingSwap ||
     selectingSafeZone ||
+    selectingCleanse ||
     selectingAoe; function reportBug() { const text = prompt('Please describe the bug or report an issue:'); if (!text) return; const uid = user?.displayName || user?.uid || 'guest'; socket.emit('game:report_bug', { roomId, text, uid }, () => { alert('Thanks for your feedback!'); }); }
 
   // make move
@@ -614,6 +619,8 @@ export default function RoomPage() {
     setSafeZoneCardUid(null);
     setSelectingAoe(false);
     setAoeCardUid(null);
+    setSelectingCleanse(false);
+    setCleanseCardUid(null);
   }
 
   // ---- play cards ----
@@ -674,7 +681,13 @@ export default function RoomPage() {
       return;
     }
 
-    // CLEANSE หรือการ์ดไม่ต้องเลือกเป้า (FORGE)
+    if (card.id === 'CLEANSE') {
+      setSelectingCleanse(true);
+      setCleanseCardUid(card.uid);
+      return;
+    }
+
+    // การ์ดไม่ต้องเลือกเป้า
     setPendingTarget({
       cardId: card.id,
       uid: card.uid,
@@ -828,6 +841,18 @@ export default function RoomPage() {
     setPendingTarget({
       cardId: 'RNG_BLAST',
       uid: aoeCardUid,
+      payload: { square },
+      label: square
+    });
+  }
+
+  // CLEANSE: ล้างจุดเป้าหมาย
+  function handleSquareClickForCleanse(square: Square) {
+    if (!selectingCleanse || !cleanseCardUid) return;
+
+    setPendingTarget({
+      cardId: 'CLEANSE',
+      uid: cleanseCardUid,
       payload: { square },
       label: square
     });
@@ -1184,6 +1209,7 @@ export default function RoomPage() {
                 if (selectingSwap) return handleSquareClickForSwap(square);
                 if (selectingSafeZone) return handleSquareClickForSafeZone(square);
                 if (selectingAoe) return handleSquareClickForAoe(square);
+                if (selectingCleanse) return handleSquareClickForCleanse(square);
 
                 // ถ้าไม่ใช่โหมดการ์ด: เลือกหมาก / เดินผ่านคลิก
                 // ถ้าไม่มีสิทธิ์ (ไม่ใช่เทิร์นเรา) ปิดการเลือก

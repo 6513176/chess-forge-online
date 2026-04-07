@@ -105,6 +105,24 @@ export function removeFromHand(cardState, side, uid) {
  *  - io: socket.io server instance
  *  - syncHandToSide: function(roomId, side)
  */
+// 3×3 รอบศูนย์กลาง
+function getArea3x3(centerSquare) {
+  if (!centerSquare || centerSquare.length !== 2) return [];
+  const file = centerSquare[0].charCodeAt(0);
+  const rank = parseInt(centerSquare[1], 10);
+  const squares = [];
+  for (let df = -1; df <= 1; df++) {
+    for (let dr = -1; dr <= 1; dr++) {
+      const f = file + df;
+      const r = rank + dr;
+      if (f < 'a'.charCodeAt(0) || f > 'h'.charCodeAt(0)) continue;
+      if (r < 1 || r > 8) continue;
+      squares.push(String.fromCharCode(f) + r);
+    }
+  }
+  return squares;
+}
+
 export function playCardOnServer({
   st,
   roomId,
@@ -311,16 +329,47 @@ export function playCardOnServer({
       return { ok: true }
     }
 
-    // -------- ล้างบัพทั้งหมด --------
+    // -------- ล้างบัพเฉพาะจุด --------
     case 'CLEANSE': {
-      // ล้างทุกบัพ/สถานะทั้งสองฝั่ง
-      st.extra = { w: 0, b: 0 }
-      st.shield = { by: null, square: null }
-      st.safeZone = { by: null, square: null }
-      st.pawnRange = {}
-      st.noKingBy = null
-      st.aoe = null
-      st.hitAndRunActiveSquare = null; st.revivedSquareThisTurn = null;
+      const targetSq = payload?.square;
+      if (!targetSq) return { ok: false, reason: 'need-square' }
+
+      if (st.shield?.square === targetSq) {
+         st.shield = { by: null, square: null }
+      }
+
+      if (st.safeZone?.square) {
+         const area = getArea3x3(st.safeZone.square)
+         if (area.includes(targetSq)) {
+           st.safeZone = { by: null, square: null }
+         }
+      }
+
+      if (st.aoe?.center) {
+         const area = getArea3x3(st.aoe.center)
+         if (area.includes(targetSq)) {
+           st.aoe = null
+         }
+      }
+
+      if (st.pawnRange && st.pawnRange[targetSq]) {
+         delete st.pawnRange[targetSq]
+      }
+
+      if (st.activeForgeSprintSq === targetSq) {
+         st.activeForgeSprintSq = null
+      }
+
+      if (st.hitAndRunActiveSquare === targetSq) {
+         st.hitAndRunActiveSquare = null
+         // Cancel their current sprint
+         st.isExtraMovePhase['w'] = false;
+         st.isExtraMovePhase['b'] = false;
+      }
+
+      if (st.revivedSquareThisTurn === targetSq) {
+          st.revivedSquareThisTurn = null; 
+      }
 
       st.cardPlayedBy = side
 
@@ -333,8 +382,9 @@ export function playCardOnServer({
         safeZone: st.safeZone,
         pawnRange: st.pawnRange,
         aoe: st.aoe,
-        hitAndRunActiveSquare: st.hitAndRunActiveSquare, revivedSquareThisTurn: st.revivedSquareThisTurn,
-        noKingBy: st.noKingBy,
+        activeForgeSprintSq: st.activeForgeSprintSq,
+        hitAndRunActiveSquare: st.hitAndRunActiveSquare,
+        revivedSquareThisTurn: st.revivedSquareThisTurn,
         cardPlayedBy: st.cardPlayedBy,
       })
 

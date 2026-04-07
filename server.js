@@ -514,7 +514,21 @@ io.on('connection', (socket) => {
       st.activeForgeSprintSq = null;
       st.revivedSquareThisTurn = null;
       st.isExtraMovePhase[side] = false;
+
+      // Update FEN to forcibly swap turn
+      if (st.fen) {
+        const parts = st.fen.split(' ');
+        parts[1] = st.turn; 
+        parts[3] = '-'; // clear en-passant
+        st.fen = parts.join(' ');
+      }
       
+      io.to(roomId).emit('game:move', {
+         move: {},
+         fenAfter: st.fen,
+         currentTurn: st.turn,
+      });
+
       io.to(roomId).emit('card:update', {
         cardPlayedBy: st.cardPlayedBy,
         noKingBy: st.noKingBy,
