@@ -24,7 +24,7 @@ const cardName = (id) => {
     case 'FORGE': return 'Forge';
     case 'SUMMON_PAWN': return 'Summon Pawn';
     case 'SWAP_ALLY': return 'Swap';
-    case 'SAFE_ZONE': return 'Safe Zone';
+    case 'SAFE_ZONE': return 'Shield Aura';
     case 'RNG_BLAST': return 'RNG Blast';
     case 'CLEANSE': return 'Cleanse';
     default: return id;
@@ -106,7 +106,6 @@ function freshRoomState() {
     result: null,
     noKingBy: null,
 
-    // restart
     restart: {
       votes: new Set(),
       counting: false,
@@ -114,6 +113,7 @@ function freshRoomState() {
       durationSec: 5,
       startedAt: null,
     },
+    disconnectLossTimers: new Map(), // Map<color, { expireAt, timerId }>
   };
 }
 
@@ -274,11 +274,22 @@ io.on('connection', (socket) => {
       }
 
       st.disconnectedColors.delete(color);
+      
+      // Clear disconnect timer if exists
+      if (st.disconnectLossTimers) {
+        const timerData = st.disconnectLossTimers.get(color);
+        if (timerData) {
+          clearTimeout(timerData.timerId);
+          st.disconnectLossTimers.delete(color);
+        }
+      }
 
       socket.join(roomId);
       st.players.set(socket.id, color);
       const side = color; // 'w' | 'b'
-      io.to(roomId).emit('players:connected', { connectedPlayers: Array.from(st.players.values()) });
+      
+      const disconnects = st.disconnectLossTimers ? Array.from(st.disconnectLossTimers.entries()).map(([c, data]) => ({ color: c, expireAt: data.expireAt })) : [];
+      io.to(roomId).emit('players:connected', { connectedPlayers: Array.from(st.players.values()), disconnects });
 
       // ส่งสถานะทั้งหมดกลับไปเพื่อซิงก์ client
       ack?.({
@@ -322,7 +333,21 @@ io.on('connection', (socket) => {
 
           s.players.delete(socket.id);
           socket.to(roomId).emit('opponent-left');
-          io.to(roomId).emit('players:connected', { connectedPlayers: Array.from(s.players.values()) });
+          
+          if (disconnectedColor && !s.gameOver) {
+            if (!s.disconnectLossTimers) s.disconnectLossTimers = new Map();
+            const expireAt = Date.now() + 60000;
+            const timerId = setTimeout(() => {
+              if (s.gameOver || !s.disconnectLossTimers.has(disconnectedColor)) return;
+              s.gameOver = true;
+              s.result = { winner: disconnectedColor === 'w' ? 'b' : 'w', reason: 'disconnect' };
+              io.to(roomId).emit('game:over', s.result);
+            }, 60000);
+            s.disconnectLossTimers.set(disconnectedColor, { expireAt, timerId });
+          }
+
+          const disconnects = s.disconnectLossTimers ? Array.from(s.disconnectLossTimers.entries()).map(([c, data]) => ({ color: c, expireAt: data.expireAt })) : [];
+          io.to(roomId).emit('players:connected', { connectedPlayers: Array.from(s.players.values()), disconnects });
 
           if (s.players.size === 0) {
             // ถ้าไม่มีคนอยู่ในห้องแล้ว ให้หน่วงเวลา 5 นาที (300,000 ms) ก่อนลบห้อง

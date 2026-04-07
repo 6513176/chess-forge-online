@@ -47,19 +47,21 @@ export default function RulesModal({ isOpen, onClose }: RulesModalProps) {
             <h3 className="text-lg font-semibold text-amber-400">Card Archetypes</h3>
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="bg-white/5 border border-rose-500/20 p-3 rounded-xl">
-                <span className="font-bold text-rose-400 block mb-1">Red (Aggression)</span>
-                <span className="text-xs text-slate-400 block">Hit & Run: Move twice (cannot capture on 2nd step).</span>
-                <span className="text-xs text-slate-400 block">Forge: Gain an extra turn (cannot capture King).</span>
-                <span className="text-xs text-slate-400 block">RNG blast: destroy a random piece in 3x3 area.</span>
+                <span className="font-bold text-rose-400 block mb-1">Red (Attack)</span>
+                <span className="text-xs text-slate-400 block mb-1"><strong>Forge:</strong> Activate before moving to sprint 2 times in one turn (can capture both times).</span>
+                <span className="text-xs text-slate-400 block"><strong>RNG Blast:</strong> Destroy a random piece in 3x3 area. Delay 1 turn.</span>
               </div>
               <div className="bg-white/5 border border-sky-500/20 p-3 rounded-xl">
                 <span className="font-bold text-sky-400 block mb-1">Blue (Defense)</span>
-                <span className="text-xs text-slate-400 block">Shield: Protects a piece for 1 turn. Safe Zone: 3x3 immunity area.</span>
-                <span className="text-xs text-slate-400 block">Cleanse: Removes all buffs/debuffs from board.</span>
+                <span className="text-xs text-slate-400 block mb-1"><strong>Shield:</strong> Protects a piece for 1 turn.</span>
+                <span className="text-xs text-slate-400 block mb-1"><strong>Shield Aura:</strong> 3x3 immunity area for 1 turn.</span>
+                <span className="text-xs text-slate-400 block"><strong>Cleanse:</strong> Removes all buffs/debuffs from board.</span>
               </div>
               <div className="bg-white/5 border border-amber-500/20 p-3 rounded-xl sm:col-span-2">
-                <span className="font-bold text-amber-400 block mb-1">Yellow (Utility)</span>
-                <span className="text-xs text-slate-400 block">Counter Sacrifice: Revive a piece at the cost of another. Swap: Swap two of your pieces. Summon: Spawn a Pawn.</span>
+                <span className="font-bold text-amber-400 block mb-1">Yellow (Special)</span>
+                <span className="text-xs text-slate-400 block mb-1"><strong>Sacrifice:</strong> Revive a piece at the cost of another.</span>
+                <span className="text-xs text-slate-400 block mb-1"><strong>Swap:</strong> Swap two of your pieces.</span>
+                <span className="text-xs text-slate-400 block"><strong>Summon:</strong> Spawn a Pawn on rank 2(W) / 7(B).</span>
               </div>
             </div>
           </div>

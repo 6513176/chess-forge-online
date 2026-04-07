@@ -59,8 +59,8 @@ const CARD_DEFS: Card[] = [
   },
   {
     id: 'SAFE_ZONE',
-    name: 'SAFE ZONE',
-    desc: 'Create a 3x3 safe zone preventing captures for 1 turn',
+    name: 'SHIELD AURA',
+    desc: 'Select an empty square to create a 3x3 aura. Allies inside the aura cannot be captured or targeted. Lasts 1 turn.',
   },
   {
     id: 'RNG_BLAST',
@@ -240,6 +240,7 @@ export default function RoomPage() {
   const [deckCount, setDeckCount] = useState<number | null>(null);
   const [graveyardCount, setGraveyardCount] = useState<number | null>(null);
   const [handCounts, setHandCounts] = useState<{ w: number, b: number } | null>(null);
+  const [disconnects, setDisconnects] = useState<{color: string, expireAt: number}[]>([]);
 
   // chat
   const [chat, setChat] = useState<string[]>([]);
@@ -381,9 +382,10 @@ export default function RoomPage() {
         window.location.reload();
       };
 
-      const onPlayersConnected = ({ connectedPlayers }: any) => {
+      const onPlayersConnected = ({ connectedPlayers, disconnects: dis }: any) => {
         if (!mounted) return;
         setConnectedPlayers(connectedPlayers || []);
+        if (dis) setDisconnects(dis);
       };
 
       // register
@@ -951,7 +953,7 @@ export default function RoomPage() {
     if (safeZone.square) {
       const area = getArea3x3(safeZone.square);
       if (area[sq]) {
-        buffs.push('Safe Zone: 3x3 Safe Area');
+        buffs.push('Shield Aura: 3x3 Safe Area');
       }
     }
 
@@ -1114,8 +1116,24 @@ export default function RoomPage() {
             {isWaitingForOpponent && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] rounded-xl pointer-events-none">
                 <div className="bg-gray-900 border border-indigo-500/50 px-6 py-4 rounded-xl text-center shadow-xl animate-pulse">
-                  <div className="text-lg font-bold text-white mb-1">Waiting for Opponent</div>
-                  <div className="text-sm text-gray-300">The game will start when both players join.</div>
+                  {disconnects.length > 0 ? (
+                    <>
+                      <div className="text-xl font-black text-rose-500 mb-2">Opponent Disconnected!</div>
+                      {disconnects.map(d => {
+                        const remaining = Math.max(0, Math.ceil((d.expireAt - now) / 1000));
+                        return (
+                          <div key={d.color} className="text-white text-lg">
+                            Forfeiting in: <span className="font-mono font-bold text-3xl text-rose-400">{remaining}</span>s
+                          </div>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-lg font-bold text-white mb-1">Waiting for Opponent</div>
+                      <div className="text-sm text-gray-300">The game will start when both players join.</div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
