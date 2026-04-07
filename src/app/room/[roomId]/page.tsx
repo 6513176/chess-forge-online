@@ -239,6 +239,7 @@ export default function RoomPage() {
   const [aoeCardUid, setAoeCardUid] = useState<string | null>(null);
   const [deckCount, setDeckCount] = useState<number | null>(null);
   const [graveyardCount, setGraveyardCount] = useState<number | null>(null);
+  const [handCounts, setHandCounts] = useState<{ w: number, b: number } | null>(null);
 
   // chat
   const [chat, setChat] = useState<string[]>([]);
@@ -434,9 +435,10 @@ export default function RoomPage() {
     };
   }, []);
   useEffect(() => {
-    const onCardCounts = (payload: { deck: number; graveyard: number }) => {
+    const onCardCounts = (payload: { deck: number; graveyard: number; handCounts?: { w: number, b: number } }) => {
       setDeckCount(payload.deck);
       setGraveyardCount(payload.graveyard);
+      if (payload.handCounts) setHandCounts(payload.handCounts);
     };
     socket.on('card:counts', onCardCounts);
     return () => {
@@ -1064,7 +1066,7 @@ export default function RoomPage() {
                 className="px-3 py-1 text-xs rounded-lg bg-red-600 hover:bg-red-700 font-bold transition font-mono shadow-sm border border-red-500"
                 style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
               >
-                Resign 🏳️
+                Resign
               </button>
             )}
             <button
@@ -1072,21 +1074,21 @@ export default function RoomPage() {
               className="px-3 py-1 text-xs rounded-lg bg-slate-700 hover:bg-slate-600 font-bold transition font-mono shadow-sm border border-slate-600 ml-2"
               style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
             >
-              Home 🏠
+              Home
             </button>
             <button
               onClick={reportBug}
               className="px-3 py-1 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 font-bold transition font-mono shadow-sm border border-indigo-500 ml-2"
               style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
             >
-              Report Bug 🐛
+              Report Bug
             </button>
             <button
               onClick={() => setShowRules(true)}
               className="px-3 py-1 text-xs rounded-lg bg-orange-600 hover:bg-orange-500 font-bold transition font-mono shadow-sm border border-orange-500 ml-2"
               style={{ textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
             >
-              Rules 📖
+              Rules
             </button>
           </div>
         </div>
@@ -1211,6 +1213,22 @@ export default function RoomPage() {
                   setLegalMovesMap(computeLegalMovesFrom(square));
                 }
               }}
+              onSquareRightClick={(sq: string) => {
+                if (isWaitingForOpponent || !meSide || turn !== meSide || anySelecting) return;
+
+                // ถือบัพ Forge อยู่ และคลิกขวาที่ตัวเอง
+                if (pawnRange[sq] && activeForgeSprintSq !== sq && hitAndRunActiveSquare !== sq) {
+                  const piece: any = gameRef.current.get(sq as any);
+                  if (piece && piece.color === meSide) {
+                    if (window.confirm("Activate Forge (Double Move) for this piece?")) {
+                      setSelectedSquare(sq as Square);
+                      socket.emit('card:activateForge', { roomId, square: sq }, (res: any) => {
+                        if (!res.ok) alert('Cannot activate Forge: ' + res.reason);
+                      });
+                    }
+                  }
+                }
+              }}
 
               customBoardStyle={{ borderRadius: 12 }}
               customSquareStyles={customSquareStyles}
@@ -1239,7 +1257,7 @@ export default function RoomPage() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-lg drop-shadow-sm">Hand</h3>
             <div className="text-sm px-3 py-1 rounded-full bg-black/30 border border-white/10">
-              Deck: {deckCount ?? '-'} | Graveyard: {graveyardCount ?? '-'}
+              Deck: {deckCount ?? '-'} | Graveyard: {graveyardCount ?? '-'} {meSide && handCounts ? `| Opponent Hand: ${handCounts[meSide === 'w' ? 'b' : 'w']}` : ''}
             </div>
           </div>
           <div className="flex gap-4 overflow-x-auto px-4 py-6 -mx-4 snap-x hide-scrollbar">
@@ -1507,7 +1525,7 @@ export default function RoomPage() {
             timeLeft: timeL,
             cardsPlayed: cardsPlayedLog,
             connectionTimeMs,
-            avgPing: pings.length > 0 ? Math.round(pings.reduce((a,b)=>a+b,0)/pings.length) : 0,
+            avgPing: pings.length > 0 ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) : 0,
             maxPing: pings.length > 0 ? Math.max(...pings) : 0,
             surveyAnswers: answers
           });
@@ -1522,7 +1540,7 @@ export default function RoomPage() {
             timeLeft: timeL,
             cardsPlayed: cardsPlayedLog,
             connectionTimeMs,
-            avgPing: pings.length > 0 ? Math.round(pings.reduce((a,b)=>a+b,0)/pings.length) : 0,
+            avgPing: pings.length > 0 ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) : 0,
             maxPing: pings.length > 0 ? Math.max(...pings) : 0,
             surveyAnswers: null
           });

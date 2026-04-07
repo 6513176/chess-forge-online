@@ -341,6 +341,10 @@ io.on('connection', (socket) => {
       io.to(socket.id).emit('card:counts', {
         deck: st.cards.deck.length,
         graveyard: st.cards.graveyard.length,
+        handCounts: {
+          w: (st.cards.hands.w || []).length,
+          b: (st.cards.hands.b || []).length,
+        }
       });
     } catch (err) {
       console.error('[joinRoom] error:', err);
@@ -418,6 +422,10 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('card:counts', {
           deck: st.cards.deck.length,
           graveyard: st.cards.graveyard.length,
+          handCounts: {
+            w: (st.cards.hands.w || []).length,
+            b: (st.cards.hands.b || []).length,
+          }
         });
 
         const sideName = side === 'w' ? 'White' : 'Black';
@@ -555,6 +563,10 @@ io.on('connection', (socket) => {
           io.to(roomId).emit('card:counts', {
             deck: st.cards.deck.length,
             graveyard: st.cards.graveyard.length,
+            handCounts: {
+              w: (st.cards.hands.w || []).length,
+              b: (st.cards.hands.b || []).length,
+            }
           });
         }
       }
