@@ -47,32 +47,41 @@ const GEQ_QUESTIONS = [
 
 interface Props {
   isOpen: boolean;
-  onSubmit: (answers: Record<string, number>) => void;
+  onSubmit: (answers: Record<string, any>) => void;
   onClose: () => void;
 }
 
 export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
-  const [step, setStep] = useState<1 | 2>(1);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [answers, setAnswers] = useState<Record<string, any>>({});
 
   if (!isOpen) return null;
 
-  const handleSelect = (id: string, value: number) => {
+  const handleSelect = (id: string, value: any) => {
     setAnswers((prev) => ({ ...prev, [id]: value }));
   };
 
-  const currentQuestions = step === 1 ? PENS_QUESTIONS : GEQ_QUESTIONS;
-  const allCurrentAnswered = currentQuestions.every((q) => answers[q.id] !== undefined);
+  const currentQuestions = step === 1 ? PENS_QUESTIONS : (step === 2 ? GEQ_QUESTIONS : []);
+
+  let allCurrentAnswered = false;
+  if (step === 0) {
+    allCurrentAnswered = !!(answers.name && answers.age && answers.boardGameExp && answers.chessExp);
+  } else {
+    allCurrentAnswered = currentQuestions.every((q) => answers[q.id] !== undefined);
+  }
 
   const handleNextOrSubmit = () => {
     if (!allCurrentAnswered) {
-      alert('Please answer all questions before proceeding.');
+      alert('Please complete all fields before proceeding.');
       return;
     }
     
-    if (step === 1) {
+    if (step === 0) {
+      setStep(1);
+      const scrollArea = document.getElementById('survey-scroll-area');
+      if (scrollArea) scrollArea.scrollTop = 0;
+    } else if (step === 1) {
       setStep(2);
-      // scroll to top
       const scrollArea = document.getElementById('survey-scroll-area');
       if (scrollArea) scrollArea.scrollTop = 0;
     } else {
@@ -95,66 +104,141 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
           <h2 className="text-2xl font-bold text-white mb-2">
             Game Experience Survey (Player Feedback)
           </h2>
-          <div className="flex items-center gap-4 text-sm text-gray-400">
-            <span className={step === 1 ? 'text-blue-400 font-bold' : ''}>Part 1: PENS (Needs Satisfaction)</span>
+          <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400 flex-wrap">
+            <span className={step === 0 ? 'text-blue-400 font-bold' : ''}>Intro: Demographics</span>
             <span>→</span>
-            <span className={step === 2 ? 'text-blue-400 font-bold' : ''}>Part 2: GEQ (Game Experience)</span>
+            <span className={step === 1 ? 'text-blue-400 font-bold' : ''}>Part 1: PENS</span>
+            <span>→</span>
+            <span className={step === 2 ? 'text-blue-400 font-bold' : ''}>Part 2: GEQ</span>
           </div>
         </div>
 
         {/* Scrollable Content */}
         <div id="survey-scroll-area" className="p-6 overflow-y-auto flex-1 custom-scrollbar scroll-smooth">
-          <div className="mb-6 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-200 text-sm">
-            Please indicate how much you agree or disagree with each statement based on the match you just played.<br />
-            {step === 1 ? '(1 = Strongly Disagree, 7 = Strongly Agree)' : '(0 = Not at all, 4 = Extremely)'}
-          </div>
-
-          <div className="space-y-4">
-            {currentQuestions.map((q, idx) => (
-              <div key={q.id} className="bg-white/5 p-5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
-                <p className="text-white mb-4 font-medium text-lg">
-                  <span className="text-blue-400 mr-2">{idx + 1}.</span> 
-                  {q.text}
-                </p>
-                <div className="flex justify-between items-center max-w-2xl mx-auto gap-2">
-                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 text-right leading-tight">
-                    {step === 1 ? 'Strongly Disagree' : 'Not at all'}
-                  </span>
-                  <div className="flex gap-1 sm:gap-2">
-                  {(step === 1 ? [1, 2, 3, 4, 5, 6, 7] : [0, 1, 2, 3, 4]).map((val) => (
-                    <label 
-                      key={val} 
-                      className={`
-                        w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center cursor-pointer border-2 transition-all font-bold text-sm sm:text-base
-                        ${answers[q.id] === val 
-                          ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-110' 
-                          : 'bg-black/50 border-gray-700 text-gray-400 hover:border-gray-500 hover:bg-gray-800'}
-                      `}
-                    >
-                      <input 
-                        type="radio" 
-                        name={q.id} 
-                        value={val} 
-                        onChange={() => handleSelect(q.id, val)}
-                        className="sr-only"
-                      />
-                      {val}
-                    </label>
-                  ))}
-                  </div>
-                  <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 leading-tight">
-                    {step === 1 ? 'Strongly Agree' : 'Extremely'}
-                  </span>
-                 </div>
+          {step === 0 && (
+            <div className="max-w-xl mx-auto space-y-5">
+              <div className="mb-4 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-200 text-sm">
+                Please answer a few questions about yourself before proceeding to the game experience survey.
               </div>
-            ))}
-          </div>
+
+              <div className="bg-white/5 p-5 rounded-xl border border-white/5">
+                <label className="block text-white mb-2 font-medium">ชื่อ-นามสกุล (Name - Surname)</label>
+                <input
+                  type="text"
+                  value={answers.name || ''}
+                  onChange={(e) => handleSelect('name', e.target.value)}
+                  placeholder="Enter your name"
+                  className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+
+              <div className="bg-white/5 p-5 rounded-xl border border-white/5">
+                <label className="block text-white mb-2 font-medium">อายุ (Age)</label>
+                <select
+                  value={answers.age || ''}
+                  onChange={(e) => handleSelect('age', e.target.value)}
+                  className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
+                >
+                  <option value="" disabled>Select option</option>
+                  <option value="<18">ต่ำกว่า 18 ปี (Under 18)</option>
+                  <option value="18-24">18–24 ปี (18-24)</option>
+                  <option value="25-34">25–34 ปี (25-34)</option>
+                  <option value="35-44">35–44 ปี (35-44)</option>
+                  <option value=">=45">45 ปีขึ้นไป (45 and older)</option>
+                </select>
+              </div>
+
+              <div className="bg-white/5 p-5 rounded-xl border border-white/5">
+                <label className="block text-white mb-2 font-medium">เคยเล่นบอร์ดเกมมานานแค่ไหน (How long have you played board games?)</label>
+                <select
+                  value={answers.boardGameExp || ''}
+                  onChange={(e) => handleSelect('boardGameExp', e.target.value)}
+                  className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
+                >
+                  <option value="" disabled>Select option</option>
+                  <option value="never">ไม่เคยเล่นเลย (Never played)</option>
+                  <option value="<1">น้อยกว่า 1 ปี (Less than 1 year)</option>
+                  <option value="1-3">1-3 ปี (1-3 years)</option>
+                  <option value="3-5">3-5 ปี (3-5 years)</option>
+                  <option value=">5">มากกว่า 5 ปี (More than 5 years)</option>
+                </select>
+              </div>
+
+              <div className="bg-white/5 p-5 rounded-xl border border-white/5">
+                <label className="block text-white mb-2 font-medium">เล่นหมากรุกมานานแค่ไหน (How long have you played chess?)</label>
+                <select
+                  value={answers.chessExp || ''}
+                  onChange={(e) => handleSelect('chessExp', e.target.value)}
+                  className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors appearance-none"
+                >
+                  <option value="" disabled>Select option</option>
+                  <option value="never">ไม่เคยเล่นเลย (Never played)</option>
+                  <option value="<1">น้อยกว่า 1 ปี (Less than 1 year)</option>
+                  <option value="1-3">1-3 ปี (1-3 years)</option>
+                  <option value="3-5">3-5 ปี (3-5 years)</option>
+                  <option value=">5">มากกว่า 5 ปี (More than 5 years)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {step > 0 && (
+            <>
+              <div className="mb-6 bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-200 text-sm">
+                Please indicate how much you agree or disagree with each statement based on the match you just played.<br />
+                {step === 1 ? '(1 = Strongly Disagree, 7 = Strongly Agree)' : '(0 = Not at all, 4 = Extremely)'}
+              </div>
+
+              <div className="space-y-4">
+                {currentQuestions.map((q, idx) => (
+                  <div key={q.id} className="bg-white/5 p-5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                    <p className="text-white mb-4 font-medium text-lg">
+                      <span className="text-blue-400 mr-2">{idx + 1}.</span> 
+                      {q.text}
+                    </p>
+                    <div className="flex justify-between items-center max-w-2xl mx-auto gap-2">
+                      <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 text-right leading-tight">
+                        {step === 1 ? 'Strongly Disagree' : 'Not at all'}
+                      </span>
+                      <div className="flex gap-1 sm:gap-2">
+                      {(step === 1 ? [1, 2, 3, 4, 5, 6, 7] : [0, 1, 2, 3, 4]).map((val) => (
+                        <label 
+                          key={val} 
+                          className={`
+                            w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center cursor-pointer border-2 transition-all font-bold text-sm sm:text-base
+                            ${answers[q.id] === val 
+                              ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-110' 
+                              : 'bg-black/50 border-gray-700 text-gray-400 hover:border-gray-500 hover:bg-gray-800'}
+                          `}
+                        >
+                          <input 
+                            type="radio" 
+                            name={q.id} 
+                            value={val} 
+                            onChange={() => handleSelect(q.id, val)}
+                            className="sr-only"
+                          />
+                          {val}
+                        </label>
+                      ))}
+                      </div>
+                      <span className="text-xs text-gray-500 w-16 mx-1 sm:w-24 leading-tight">
+                        {step === 1 ? 'Strongly Agree' : 'Extremely'}
+                      </span>
+                     </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
         <div className="p-6 border-t border-gray-800 flex-shrink-0 flex justify-between items-center bg-gray-900 rounded-b-2xl">
           <div className="text-gray-400 text-sm">
-            {Object.keys(answers).length} / {PENS_QUESTIONS.length + GEQ_QUESTIONS.length} Questions Answered
+            {step === 0 
+              ? 'Introduction' 
+              : `${Object.keys(answers).filter(k => k.startsWith('pens') || k.startsWith('geq')).length} / ${PENS_QUESTIONS.length + GEQ_QUESTIONS.length} Questions Answered`}
           </div>
           <button 
             onClick={handleNextOrSubmit}
@@ -164,7 +248,7 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
                 : 'bg-white/10 text-gray-600 cursor-not-allowed border border-white/5'
             }`}
           >
-            {step === 1 ? 'Next Part →' : 'Submit Feedback'}
+            {step === 0 ? 'Start Survey →' : (step === 1 ? 'Next Part →' : 'Submit Feedback')}
           </button>
         </div>
 

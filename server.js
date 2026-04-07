@@ -228,9 +228,9 @@ io.on('connection', (socket) => {
 
   // เข้าห้อง
   socket.on('joinRoom', (payload, ack) => {
-      let roomId = payload;
-      let userId = 'guest';
-      if (typeof payload === 'object' && payload !== null) { roomId = payload.roomId; userId = payload.userId || 'guest'; }
+    let roomId = payload;
+    let userId = 'guest';
+    if (typeof payload === 'object' && payload !== null) { roomId = payload.roomId; userId = payload.userId || 'guest'; }
     try {
       if (!roomId) return ack?.({ ok: false, reason: 'no-room-id' });
       const st = ensureState(roomId);
@@ -411,8 +411,8 @@ io.on('connection', (socket) => {
 
           io.to(roomId).emit('card:update', {
             cardPlayedBy: st.cardPlayedBy,
-          noKingBy: st.noKingBy,
-          hitAndRunActiveSquare: null,
+            noKingBy: st.noKingBy,
+            hitAndRunActiveSquare: null,
             shield: st.shield,
             safeZone: st.safeZone
           });
@@ -544,7 +544,7 @@ io.on('connection', (socket) => {
       // --- จัดการเทิร์น / เสริมพลัง / อายุบัพ ---
       const hadExtra = st.extra[side] > 0;
       const pieceHasRangeBuff = !!(st.pawnRange && st.pawnRange[move.from]);
-      
+
       // ให้สิทธิ์เดินเบี้ยอีกครั้งเฉพาะเกมที่ยังไม่ได้ใช้โควต้า Range Buff ในเทิร์นนี้
       const usedRangeBuff = pieceHasRangeBuff && !st.hitAndRunActiveSquare;
 
@@ -691,23 +691,23 @@ io.on('connection', (socket) => {
   // ---------- SUMMARY REPORT (Consolidated Analytics) ----------
   socket.on('game:summary_report', (data) => {
     try {
-      const { 
-        roomId, 
+      const {
+        roomId,
         userId, email,
-        timeLeft, 
-        cardsPlayed, 
+        timeLeft,
+        cardsPlayed,
         connectionTimeMs, avgPing, maxPing,
-        surveyAnswers 
+        surveyAnswers
       } = data;
-      
+
       const st = rooms.get(roomId);
 
-            let serverCardsPlayedList = []; let outcome = 'unknown', reason = 'unknown', mySide = null;
+      let serverCardsPlayedList = []; let outcome = 'unknown', reason = 'unknown', mySide = null;
       if (st && st.cardsPlayedHistory) {
         serverCardsPlayedList = st.cardsPlayedHistory.filter(c => c.socketId === socket.id).map(c => c.cardId); mySide = st.players.get(socket.id); if (st.result) { reason = st.result.reason || st.result.type || 'unknown'; if (st.result.winner === 'draw') outcome = 'draw'; else if (st.result.winner === mySide) outcome = 'win'; else if (st.result.winner) outcome = 'loss'; }
       }
 
-const payload = {
+      const payload = {
         roomId,
         email, outcome, reason, mySide,
         userId: userId && userId !== 'guest' ? userId : socket.id,
@@ -741,7 +741,7 @@ const payload = {
         }).catch(err => console.error('bug report err:', err));
       }
       cb?.({ ok: true });
-    } catch(err) {
+    } catch (err) {
       cb?.({ ok: false });
     }
   });
