@@ -1152,8 +1152,9 @@ export default function RoomPage() {
               arePiecesDraggable={
                 !isOver && !isWaitingForOpponent && !!meSide && turn === meSide && !anySelecting
               }
-              isDraggablePiece={({ piece }) => {
+              isDraggablePiece={({ piece, sourceSquare }) => {
                 if (isWaitingForOpponent || !meSide || turn !== meSide || anySelecting) return false;
+                if (hitAndRunActiveSquare && sourceSquare !== hitAndRunActiveSquare) return false;
                 const my = meSide === 'w' ? 'w' : 'b';
                 return piece.startsWith(my);
               }}
@@ -1214,6 +1215,10 @@ export default function RoomPage() {
 
                   // ถ้าคลิกหมากของเราอื่นๆ → เปลี่ยน selection
                   if (piece && piece.color === meSide) {
+                    if (hitAndRunActiveSquare && square !== hitAndRunActiveSquare) {
+                      alert('You must select the active sprinting piece.');
+                      return;
+                    }
                     setSelectedSquare(square);
                     setLegalMovesMap(computeLegalMovesFrom(square));
                     return;
@@ -1227,6 +1232,10 @@ export default function RoomPage() {
 
                 // ถ้ายังไม่มี selection: ถ้าคลิกหมากของเรา ให้ select
                 if (piece && piece.color === meSide) {
+                  if (hitAndRunActiveSquare && square !== hitAndRunActiveSquare) {
+                    alert('You must select the active sprinting piece.');
+                    return;
+                  }
                   setSelectedSquare(square);
                   setLegalMovesMap(computeLegalMovesFrom(square));
                 }
@@ -1272,6 +1281,21 @@ export default function RoomPage() {
 
         {/* CARDS */}
         <div className="flex-shrink-0">
+          {hitAndRunActiveSquare && meSide === turn && (
+            <button 
+              onClick={() => {
+                if (window.confirm('Skip 2nd move and end turn?')) {
+                  socket.emit('card:cancelForgeSprint', { roomId }, (res: any) => {
+                    if (!res?.ok) alert('Cannot cancel right now.');
+                  });
+                }
+              }}
+              className="w-full mb-3 px-3 py-2 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 rounded-xl font-bold flex gap-2 items-center justify-center animate-pulse shadow-[0_0_15px_rgba(244,63,94,0.4)] text-sm text-white"
+            >
+              ⚠️ Skip 2nd Move (End Turn)
+            </button>
+          )}
+
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-lg drop-shadow-sm">Hand</h3>
             <div className="text-sm px-3 py-1 rounded-full bg-black/30 border border-white/10">

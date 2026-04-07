@@ -494,6 +494,41 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('card:cancelForgeSprint', ({ roomId }, cb) => {
+    try {
+      const st = rooms.get(roomId);
+      const side = st?.players.get(socket.id);
+      if (!st || st.turn !== side || !st.hitAndRunActiveSquare) {
+        return cb?.({ ok: false, reason: 'invalid' });
+      }
+      
+      // ลบบัพ pawnRange ออก
+      if (st.pawnRange && st.pawnRange[st.hitAndRunActiveSquare]) {
+        delete st.pawnRange[st.hitAndRunActiveSquare];
+      }
+      
+      st.turn = opp(st.turn);
+      st.cardPlayedBy = null;
+      st.noKingBy = null;
+      st.hitAndRunActiveSquare = null;
+      st.activeForgeSprintSq = null;
+      st.revivedSquareThisTurn = null;
+      st.isExtraMovePhase[side] = false;
+      
+      io.to(roomId).emit('card:update', {
+        cardPlayedBy: st.cardPlayedBy,
+        noKingBy: st.noKingBy,
+        hitAndRunActiveSquare: null,
+        activeForgeSprintSq: null,
+        revivedSquareThisTurn: null,
+        pawnRange: st.pawnRange
+      });
+      cb?.({ ok: true });
+    } catch(err) {
+      cb?.({ ok: false });
+    }
+  });
+
   // ---------- moves ----------
   socket.on('game:move', ({ roomId, move, fenBefore, fenAfter, by, capturedSquare }, cb) => {
     try {
@@ -535,7 +570,11 @@ io.on('connection', (socket) => {
         return cb?.({ ok: false, reason: 'sacrificed-piece-no-capture' });
       }
 
-
+      // 🔴 บังคับว่าตาเดินที่สองของการสปรินต์ ต้องเป็นตัววิ่งตัวเดิมเท่านั้น!
+      if (st.hitAndRunActiveSquare && move.from !== st.hitAndRunActiveSquare) {
+        socket.emit('game:moveRejected', { reason: 'Must move the sprinting piece' });
+        return cb?.({ ok: false, reason: 'must-move-sprinting-piece' });
+      }
 
       // กันกินช่องที่เป็น safe zone (3x3 รอบ center)
       if (st.safeZone?.square && capturedSquare) {
