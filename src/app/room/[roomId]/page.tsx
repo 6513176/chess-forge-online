@@ -430,6 +430,48 @@ export default function RoomPage() {
     };
   }, [roomId]);
 
+  // Auto-rejoin on reconnect (e.g. after tab switch / mobile background)
+  useEffect(() => {
+    const onReconnect = () => {
+      if (!roomId || isOver) return;
+      const uid = user?.displayName || user?.uid || 'guest';
+      socket.emit('joinRoom', { roomId: String(roomId), userId: uid }, (res: any) => {
+        if (res?.ok) {
+          // Sync state from server
+          if (res.currentTurn) setTurn(res.currentTurn);
+          if (res.fen) {
+            try {
+              gameRef.current.load(res.fen);
+            } catch {
+              try { gameRef.current = new Chess(res.fen); } catch { /* ignore */ }
+            }
+            setFen(gameRef.current.fen());
+          }
+          if (res.connectedPlayers) setConnectedPlayers(res.connectedPlayers);
+          if (res.extra) setExtraMove(res.extra);
+          if (res.shield) setShield(res.shield);
+          if (res.safeZone) setSafeZone(res.safeZone);
+          if (res.pawnRange) setPawnRange(res.pawnRange);
+          if (res.hitAndRunActiveSquare !== undefined) setHitAndRunActiveSquare(res.hitAndRunActiveSquare);
+          if (res.activeForgeSprintSq !== undefined) setActiveForgeSprintSq(res.activeForgeSprintSq);
+          if (res.revivedSquareThisTurn !== undefined) setRevivedSquareThisTurn(res.revivedSquareThisTurn);
+          if (res.aoe) setAoe(res.aoe);
+          if (res.cardPlayedBy !== undefined) setCardPlayedBy(res.cardPlayedBy);
+          if (res.clock) {
+            setTimeLeft({ w: res.clock.w, b: res.clock.b });
+            setClockRunning(res.clock.running ?? null);
+          }
+          if (res.hand && Array.isArray(res.hand)) {
+            setHand(res.hand.map(fromServerCard));
+          }
+        }
+      });
+    };
+
+    socket.on('connect', onReconnect);
+    return () => { socket.off('connect', onReconnect); };
+  }, [roomId, isOver, user]);
+
   // ฟัง clock:update แยกต่างหาก
   useEffect(() => {
     const onClockUpdate = (payload: {

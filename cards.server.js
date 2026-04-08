@@ -21,13 +21,13 @@ const ALL_CARD_IDS = [
 
   // Defense - 30% (8 cards)
   'SHIELD', 'SHIELD', 'SHIELD', // 3
-  'SAFE_ZONE', 'SAFE_ZONE', 'SAFE_ZONE', // 3
-  'CLEANSE', 'CLEANSE', // 2
+  'SAFE_ZONE', 'SAFE_ZONE', // 2
+  'CLEANSE', 'CLEANSE', 'CLEANSE', // 3
 
   // Special - 30% (8 cards)
-  'SUMMON_PAWN', 'SUMMON_PAWN', 'SUMMON_PAWN', // 3
+  'SUMMON_PAWN', 'SUMMON_PAWN',// 2
   'SWAP_ALLY', 'SWAP_ALLY', 'SWAP_ALLY', // 3
-  'SACRIFICE', 'SACRIFICE', // 2
+  'SACRIFICE', 'SACRIFICE', 'SACRIFICE', // 3
 ]
 
 const mkUid = () =>
@@ -335,40 +335,40 @@ export function playCardOnServer({
       if (!targetSq) return { ok: false, reason: 'need-square' }
 
       if (st.shield?.square === targetSq) {
-         st.shield = { by: null, square: null }
+        st.shield = { by: null, square: null }
       }
 
       if (st.safeZone?.square) {
-         const area = getArea3x3(st.safeZone.square)
-         if (area.includes(targetSq)) {
-           st.safeZone = { by: null, square: null }
-         }
+        const area = getArea3x3(st.safeZone.square)
+        if (area.includes(targetSq)) {
+          st.safeZone = { by: null, square: null }
+        }
       }
 
       if (st.aoe?.center) {
-         const area = getArea3x3(st.aoe.center)
-         if (area.includes(targetSq)) {
-           st.aoe = null
-         }
+        const area = getArea3x3(st.aoe.center)
+        if (area.includes(targetSq)) {
+          st.aoe = null
+        }
       }
 
       if (st.pawnRange && st.pawnRange[targetSq]) {
-         delete st.pawnRange[targetSq]
+        delete st.pawnRange[targetSq]
       }
 
       if (st.activeForgeSprintSq === targetSq) {
-         st.activeForgeSprintSq = null
+        st.activeForgeSprintSq = null
       }
 
       if (st.hitAndRunActiveSquare === targetSq) {
-         st.hitAndRunActiveSquare = null
-         // Cancel their current sprint
-         st.isExtraMovePhase['w'] = false;
-         st.isExtraMovePhase['b'] = false;
+        st.hitAndRunActiveSquare = null
+        // Cancel their current sprint
+        st.isExtraMovePhase['w'] = false;
+        st.isExtraMovePhase['b'] = false;
       }
 
       if (st.revivedSquareThisTurn === targetSq) {
-          st.revivedSquareThisTurn = null; 
+        st.revivedSquareThisTurn = null;
       }
 
       st.cardPlayedBy = side
