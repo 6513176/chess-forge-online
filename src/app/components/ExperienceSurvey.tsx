@@ -4,45 +4,69 @@ import { useState } from 'react';
 
 // --- FULL PENS (21 ITEMS) ---
 const PENS_QUESTIONS = [
-  // Competence
-  { id: 'pens_c1', text: 'I feel highly capable and effective when playing.' },
-  { id: 'pens_c2', text: 'I feel a sense of competence playing this game.' },
+  // Competence (3 items)
+  { id: 'pens_c1', text: 'I feel competent at the game.' },
+  { id: 'pens_c2', text: 'I feel very capable and effective when playing.' },
   { id: 'pens_c3', text: 'My ability to play the game is well matched with the game\'s challenges.' },
-  // Autonomy
+  // Autonomy (3 items)
   { id: 'pens_a1', text: 'The game provides me with interesting options and choices.' },
-  { id: 'pens_a2', text: 'I experience a lot of freedom in the game.' },
-  { id: 'pens_a3', text: 'The game lets you do interesting things.' },
-  // Relatedness (Trimmed down)
-  { id: 'pens_r2', text: 'I feel connected to the opponent when playing.' },
-  // Intuitive Controls
+  { id: 'pens_a2', text: 'The game lets you do interesting things.' },
+  { id: 'pens_a3', text: 'I experienced a lot of freedom in the game.' },
+  // Relatedness (3 items)
+  { id: 'pens_r1', text: 'I find the relationships I form in this game fulfilling.' },
+  { id: 'pens_r2', text: 'I find the relationships I form in this game important.' },
+  { id: 'pens_r3', text: 'I don\'t feel close to other players. (-)' },
+  // Presence / Immersion (9 items)
+  { id: 'pens_p1', text: 'When playing the game, I feel transported to another time and place.' },
+  { id: 'pens_p2', text: 'Exploring the game world feels like taking an actual trip to a new place.' },
+  { id: 'pens_p3', text: 'When moving through the game world I feel as if I am actually there.' },
+  { id: 'pens_p4', text: 'I am not impacted emotionally by events in the game. (-)' },
+  { id: 'pens_p5', text: 'The game was emotionally engaging.' },
+  { id: 'pens_p6', text: 'I experience feelings as deeply in the game as I have in real life.' },
+  { id: 'pens_p7', text: 'When playing the game I feel as if I was part of the story.' },
+  { id: 'pens_p8', text: 'When I accomplished something in the game I experienced genuine pride.' },
+  { id: 'pens_p9', text: 'I had reactions to events and characters in the game as if they were real.' },
+  // Intuitive Controls (3 items)
   { id: 'pens_ic1', text: 'Learning the game controls was easy.' },
   { id: 'pens_ic2', text: 'The game controls are intuitive.' },
   { id: 'pens_ic3', text: 'When I wanted to do something in the game, it was easy to remember the corresponding control.' },
-  // Immersion (Trimmed down to focus/visuals)
-  { id: 'pens_p3', text: 'The game board feels visually engaging to me.' },
-  { id: 'pens_p6', text: 'I become completely focused on the match.' },
 ];
 
-// --- FOCUSED GEQ CORE (TRIMMED) ---
+// --- FULL GEQ CORE MODULE (33 ITEMS) ---
 const GEQ_QUESTIONS = [
-  { id: 'geq_1', text: 'I felt content.' },
-  { id: 'geq_2', text: 'I felt skilful.' },
-  { id: 'geq_3', text: 'I was interested in the game\'s mechanics.' },
-  { id: 'geq_4', text: 'I thought it was fun.' },
-  { id: 'geq_6', text: 'I felt successful.' },
-  { id: 'geq_7', text: 'I felt imaginative.' },
-  { id: 'geq_10', text: 'I felt frustrated.' },
-  { id: 'geq_11', text: 'I found it tiresome.' },
-  { id: 'geq_13', text: 'I felt confident in my moves.' },
-  { id: 'geq_14', text: 'I felt bored.' },
-  { id: 'geq_15', text: 'I found it challenging.' },
-  { id: 'geq_16', text: 'I was fully occupied with the match.' },
-  { id: 'geq_20', text: 'I lost track of time.' },
-  { id: 'geq_24', text: 'It was aesthetically pleasing.' },
-  { id: 'geq_26', text: 'I felt pressured to make the right moves.' },
-  { id: 'geq_29', text: 'I felt competent.' },
-  { id: 'geq_30', text: 'I felt pressured to act quickly.' },
-  { id: 'geq_33', text: 'I found it hard.' }
+  { id: 'geq_1',  text: 'I felt content.' },
+  { id: 'geq_2',  text: 'I felt skilful.' },
+  { id: 'geq_3',  text: 'I was interested in the game\'s story.' },
+  { id: 'geq_4',  text: 'I thought it was fun.' },
+  { id: 'geq_5',  text: 'I was fully occupied with the game.' },
+  { id: 'geq_6',  text: 'I felt happy.' },
+  { id: 'geq_7',  text: 'It gave me a bad mood.' },
+  { id: 'geq_8',  text: 'I thought about other things.' },
+  { id: 'geq_9',  text: 'I found it tiresome.' },
+  { id: 'geq_10', text: 'I felt competent.' },
+  { id: 'geq_11', text: 'I thought it was hard.' },
+  { id: 'geq_12', text: 'It was aesthetically pleasing.' },
+  { id: 'geq_13', text: 'I forgot everything around me.' },
+  { id: 'geq_14', text: 'I felt good.' },
+  { id: 'geq_15', text: 'I was good at it.' },
+  { id: 'geq_16', text: 'I felt bored.' },
+  { id: 'geq_17', text: 'I felt successful.' },
+  { id: 'geq_18', text: 'I felt imaginative.' },
+  { id: 'geq_19', text: 'I felt that I could explore things.' },
+  { id: 'geq_20', text: 'I enjoyed it.' },
+  { id: 'geq_21', text: 'I was fast at reaching the game\'s targets.' },
+  { id: 'geq_22', text: 'I felt annoyed.' },
+  { id: 'geq_23', text: 'I felt pressured.' },
+  { id: 'geq_24', text: 'I felt irritable.' },
+  { id: 'geq_25', text: 'I lost track of time.' },
+  { id: 'geq_26', text: 'I felt challenged.' },
+  { id: 'geq_27', text: 'I found it impressive.' },
+  { id: 'geq_28', text: 'I was deeply concentrated in the game.' },
+  { id: 'geq_29', text: 'I felt frustrated.' },
+  { id: 'geq_30', text: 'It felt like a rich experience.' },
+  { id: 'geq_31', text: 'I lost connection with the outside world.' },
+  { id: 'geq_32', text: 'I felt time pressure.' },
+  { id: 'geq_33', text: 'I had to put a lot of effort into it.' },
 ];
 
 interface Props {
@@ -105,11 +129,11 @@ export default function ExperienceSurvey({ isOpen, onSubmit, onClose }: Props) {
             Game Experience Survey (Player Feedback)
           </h2>
           <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400 flex-wrap">
-            <span className={step === 0 ? 'text-blue-400 font-bold' : ''}>Intro: Demographics</span>
+            <span className={step === 0 ? 'text-blue-400 font-bold' : ''}>Intro: Demographics (5)</span>
             <span>→</span>
-            <span className={step === 1 ? 'text-blue-400 font-bold' : ''}>Part 1: PENS</span>
+            <span className={step === 1 ? 'text-blue-400 font-bold' : ''}>Part 1: PENS (21)</span>
             <span>→</span>
-            <span className={step === 2 ? 'text-blue-400 font-bold' : ''}>Part 2: GEQ</span>
+            <span className={step === 2 ? 'text-blue-400 font-bold' : ''}>Part 2: GEQ (33)</span>
           </div>
         </div>
 
